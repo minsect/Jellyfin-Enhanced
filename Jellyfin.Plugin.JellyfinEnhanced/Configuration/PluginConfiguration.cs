@@ -79,6 +79,13 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
             JellyseerrUrls = "";
             JellyseerrApiKey = "";
 
+            // Spotify Search Settings
+            SpotifySearchEnabled = false;
+            SpotifySearchSLSKDUrls = "";
+            SpotifySearchMusicDirectory = "";
+            SpotifyClientID = "";
+            SpotifyClientSecret = "";
+
             // Arr Links Settings
             ArrLinksEnabled = false;
             SonarrUrl = "";
@@ -136,6 +143,13 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
         public bool ShowElsewhereOnJellyseerr { get; set; }
         public string JellyseerrUrls { get; set; }
         public string JellyseerrApiKey { get; set; }
+
+        // Spotify Search Settings
+        public bool SpotifySearchEnabled { get; set; }
+        public string SpotifySearchSLSKDUrls { get; set; }
+        public string SpotifySearchMusicDirectory { get; set; }
+        public string SpotifyClientID { get; set; }
+        public string SpotifyClientSecret { get; set; }
 
         // Arr Links Settings
         public bool ArrLinksEnabled { get; set; }

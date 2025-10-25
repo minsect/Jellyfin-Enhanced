@@ -22,6 +22,7 @@
                 <button class="jellyfin-tab-button active" data-tab="enhanced" style="background: none; border: none; color: var(--primary-accent-color, #fff); cursor: pointer; transition: color 0.3s, border-bottom 0.3s; border-bottom: 2px solid var(--primary-accent-color, #fff);"><h3>Enhanced Settings</h3></button>
                 <button class="jellyfin-tab-button" data-tab="elsewhere" style="background: none; border: none; color: #ccc; cursor: pointer; transition: color 0.3s, border-bottom 0.3s; border-bottom: 2px solid transparent;"><h3>Elsewhere Settings</h3></button>
                 <button class="jellyfin-tab-button" data-tab="jellyseerr" style="background: none; border: none; color: #ccc; cursor: pointer; transition: color 0.3s, border-bottom 0.3s; border-bottom: 2px solid transparent;"><h3>Jellyseerr Settings</h3></button>
+                <button class="jellyfin-tab-button" data-tab="spotifysearch" style="background: none; border: none; color: #ccc; cursor: pointer; transition: color 0.3s, border-bottom 0.3s; border-bottom: 2px solid transparent;"><h3>Spotify Search Settings</h3></button>
                 <button class="jellyfin-tab-button" data-tab="arr-links" style="background: none; border: none; color: #ccc; cursor: pointer; transition: color 0.3s, border-bottom 0.3s; border-bottom: 2px solid transparent;"><h3>*arr Links</h3></button>
                 <button class="jellyfin-tab-button" data-tab="extras" style="background: none; border: none; color: #ccc; cursor: pointer; transition: color 0.3s, border-bottom 0.3s; border-bottom: 2px solid transparent;"><h3>Other Settings</h3></button>
             </div>
@@ -258,6 +259,51 @@
                                     All users much be imported to Jellyseer as Jellyfin users for them to be able to request conetnt.
                                 </div>
                             </div>
+                        </div>
+                    </fieldset>
+                </div>
+                <div id="spotifysearch" class="jellyfin-tab-content" style="display: none; font-family: inherit;">
+                    <fieldset class="verticalSection-extrabottompadding">
+                        <legend class="sectionTitle"><h3>Configuration</h3></legend>
+                        <div class="configSection">
+                            <div class="checkboxContainer" style="margin-bottom: 0.5em !important;">
+                                <label>
+                                    <input id="SpotifySearchEnabled" is="emby-checkbox" type="checkbox"/>
+                                    <span>Show Spotify Results in Search</span>
+                                </label>
+                            </div>
+                            <div class="fieldDescription" style="margin-bottom: 2em;">Enhance Jellyfin search by showing results from Spotify.<br>This allows users to discover and request missing songs and artists directly from Jellyfin.</div>
+                            <div class="inputContainer">
+                                <label class="sectionTitle" style="margin-bottom: 5px;" for="SpotifySLSKDUrls">SLSKD URL(s)</label>
+                                <textarea style="display:block; height: 8vh !important;" class="emby-textarea emby-input" id="SpotifySLSKDUrls" name="SpotifySLSKDUrls" placeholder="http://slskd:5030&#10;https://slskd.example.com"></textarea>
+                                <div class="fieldDescription">Enter your SLSKD instance URLs, one per line. The script will use the first one that connects successfully.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="SpotifyClientID">Spotify Client ID</label>
+                                <div style="display: flex; align-items: center; gap: 1em; margin-left: -1em;">
+                                    <input id="SpotifyClientID" is="emby-input" name="SpotifyClientID" type="text" style="flex-grow: 1;"/>
+                                </div>
+                                <div class="fieldDescription">You can find this in spotify developer stuff</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="SpotifyClientSecret">Spotify Client Secret</label>
+                                <div style="display: flex; align-items: center; gap: 1em; margin-left: -1em;">
+                                    <input id="SpotifyClientSecret" is="emby-input" name="SpotifyClientSecret" type="text" style="flex-grow: 1;"/>
+                                </div>
+                                <div class="fieldDescription">You can find this in spotify developer stuff</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="SpotifySearchMusicDirectory">Spotify Search Music Directory</label>
+                                <div style="display: flex; align-items: center; gap: 1em; margin-left: -1em;">
+                                    <input id="SpotifySearchMusicDirectory" is="emby-input" name="SpotifySearchMusicDirectory" type="text" style="flex-grow: 1;"/>
+                                    <span id="jellyseerrStatusIndicator" class="material-icons" style="transition: color 0.3s ease;"></span>
+                                    <button is="emby-button" type="button" id="testJellyseerrBtn" class="raised button-submit">
+                                        <span>Test</span>
+                                    </button>
+                                </div>
+                                <div class="fieldDescription">the library all music downloaded will output to.</div>
+                            </div>
+
                         </div>
                     </fieldset>
                 </div>
@@ -730,6 +776,13 @@
                 document.querySelector('#showElsewhereOnJellyseerr').checked = config.ShowElsewhereOnJellyseerr;
                 document.querySelector('#jellyseerrUrls').value = config.JellyseerrUrls;
                 document.querySelector('#JellyseerrApiKey').value = config.JellyseerrApiKey;
+
+                document.querySelector('#SpotifySearchEnabled').checked = config.SpotifySearchEnabled;
+                document.querySelector('#SpotifySearchMusicDirectory').value = config.SpotifySearchMusicDirectory;
+                document.querySelector('#SpotifySLSKDUrls').value = config.SpotifySearchSLSKDUrls;
+                document.querySelector('#SpotifyClientID').value = config.SpotifyClientID;
+                document.querySelector('#SpotifyClientSecret').value = config.SpotifyClientSecret;
+
                 document.querySelector('#arrLinksEnabled').checked = config.ArrLinksEnabled;
                 document.querySelector('#sonarrUrl').value = config.SonarrUrl;
                 document.querySelector('#radarrUrl').value = config.RadarrUrl;
@@ -790,6 +843,13 @@
             config.ShowElsewhereOnJellyseerr = document.querySelector('#showElsewhereOnJellyseerr').checked;
             config.JellyseerrUrls = (document.querySelector('#jellyseerrUrls').value || '').split('\n').map(u => u.trim()).filter(Boolean).join('\n');
             config.JellyseerrApiKey = (document.querySelector('#JellyseerrApiKey').value || '').trim();
+
+            config.SpotifySearchEnabled = document.querySelector('#SpotifySearchEnabled').checked;
+            config.SpotifySearchMusicDirectory = document.querySelector('#SpotifySearchMusicDirectory').value;
+            config.SpotifySearchSLSKDUrls = (document.querySelector('#SpotifySLSKDUrls').value || '').split('\n').map(u => u.trim()).filter(Boolean).join('\n');
+            config.SpotifyClientID = document.querySelector('#SpotifyClientID').value
+            config.SpotifyClientSecret = document.querySelector('#SpotifyClientSecret').value
+
             config.ArrLinksEnabled = document.querySelector('#arrLinksEnabled').checked;
             config.SonarrUrl = document.querySelector('#sonarrUrl').value;
             config.RadarrUrl = document.querySelector('#radarrUrl').value;

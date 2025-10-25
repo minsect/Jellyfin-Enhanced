@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using Microsoft.Extensions.Caching.Memory;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
@@ -41,8 +42,8 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         private readonly IUserDataManager _userDataManager;
         private readonly ILibraryManager _libraryManager;
         private readonly IDtoService _dtoService;
-
-        public JellyfinEnhancedController(IHttpClientFactory httpClientFactory, Logger logger, IUserManager userManager, IUserDataManager userDataManager, ILibraryManager libraryManager, IDtoService dtoService)
+        private readonly IMemoryCache _memoryCache;
+        public JellyfinEnhancedController(IHttpClientFactory httpClientFactory, Logger logger, IUserManager userManager, IUserDataManager userDataManager, ILibraryManager libraryManager, IDtoService dtoService, IMemoryCache memoryCache)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
@@ -50,6 +51,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             _userDataManager = userDataManager;
             _libraryManager = libraryManager;
             _dtoService = dtoService;
+            _memoryCache = memoryCache;
         }
 
         private async Task<string?> GetJellyseerrUserId(string jellyfinUserId)
@@ -108,6 +110,95 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
 
             _logger.Warning($"Could not find a matching Jellyseerr user for Jellyfin User ID {jellyfinUserId} after checking all URLs.");
             return null;
+        }
+        private async Task<string?> GetSpotifyAPIToken()
+        {
+            if (!_memoryCache.TryGetValue("SpotifyAPIToken", out string? token))
+            {
+                var config = JellyfinEnhanced.Instance?.Configuration;
+                if (config == null || !config.SpotifySearchEnabled || string.IsNullOrEmpty(config.SpotifySearchSLSKDUrls) || string.IsNullOrEmpty(config.SpotifySearchMusicDirectory) || string.IsNullOrEmpty(config.SpotifyClientID) || string.IsNullOrEmpty(config.SpotifyClientSecret))
+                {
+                    _logger.Warning("Spotify integration is not configured correctly or enabled.");
+                    return null; //StatusCode(503, "Spotify integration is not configured correctly or enabled.");
+                }
+                token = "";
+                var httpClient = _httpClientFactory.CreateClient();
+                var request = new HttpRequestMessage(HttpMethod.Post, "https://accounts.spotify.com/api/token");
+                request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    { "grant_type", "client_credentials" },
+                    { "client_id", config.SpotifyClientID },
+                    { "client_secret", config.SpotifyClientSecret }
+                });
+                var response = await httpClient.SendAsync(request);
+                // parse response as json
+                var responseContent = await response.Content.ReadAsStringAsync();
+                if (response.IsSuccessStatusCode)
+                {
+                    using var doc = JsonDocument.Parse(responseContent);
+                    if (doc.RootElement.TryGetProperty("access_token", out var tokenElement))
+                    {
+                        token = tokenElement.GetString() ?? "";
+                        var cacheEntryOptions = new MemoryCacheEntryOptions()
+                            .SetSlidingExpiration(TimeSpan.FromSeconds(3599));
+                        _memoryCache.Set("SpotifyAPIToken", token, cacheEntryOptions);
+                        return token;
+                    }
+                }
+                return null;
+            }
+            return token;
+        }
+        private async Task<IActionResult> ProxySpotifyRequest(string apiPath, HttpMethod method, string? content = null)
+        {
+            string? jellyfinUserId = null;
+            if (Request.Headers.TryGetValue("X-Jellyfin-User-Id", out var jellyfinUserIdValues))
+            {
+                jellyfinUserId = jellyfinUserIdValues.FirstOrDefault();
+                if (string.IsNullOrEmpty(jellyfinUserId))
+                {
+                    _logger.Warning("Could not find Jellyfin User ID in request headers.");
+                    return BadRequest(new { message = "Jellyfin User ID was not provided in the request." });
+                }
+            }
+            var token = await GetSpotifyAPIToken();
+            var config = JellyfinEnhanced.Instance?.Configuration;
+            if (config == null || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(config.SpotifySearchSLSKDUrls) || string.IsNullOrEmpty(config.SpotifySearchMusicDirectory) ) {
+                _logger.Warning("Spotify integration is not configured correctly or enabled.");
+                return StatusCode(503, "Spotify integration is not configured correctly or enabled.");
+            }
+
+            var httpClient = _httpClientFactory.CreateClient();
+            httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+            var url = $"https://api.spotify.com/v1/{apiPath}";
+            var request = new HttpRequestMessage(method, url);
+            if (content != null)
+            {
+                _logger.Info($"Request body: {content}");
+                request.Content = new StringContent(content, Encoding.UTF8, "application/json");
+            }
+            var response = await httpClient.SendAsync(request);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.Info($"Successfully received response from spotify for user {jellyfinUserId}. Status: {response.StatusCode}");
+                return Content(responseContent, "application/json");
+            }
+
+            _logger.Warning($"Request to Spotify API for user {jellyfinUserId} failed. URL: {url}, Status: {response.StatusCode}, Response: {responseContent}");
+            // Try to parse the error as JSON, if it fails, create a new JSON error object.
+            try
+            {
+                JsonDocument.Parse(responseContent);
+                return StatusCode((int)response.StatusCode, responseContent);
+            }
+            catch (JsonException)
+            {
+                // The response was not valid JSON (e.g., HTML error page), so we create a standard error object.
+                var errorResponse = new { message = $"Upstream error from Spotify: {response.ReasonPhrase}" };
+                return StatusCode((int)response.StatusCode, errorResponse);
+            }
         }
 
         private async Task<IActionResult> ProxyJellyseerrRequest(string apiPath, HttpMethod method, string? content = null)
@@ -288,6 +379,18 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         {
             return ProxyJellyseerrRequest($"/api/v1/search?query={Uri.EscapeDataString(query)}", HttpMethod.Get);
         }
+
+        [HttpGet("spotify/search")]
+        public Task<IActionResult> SpotifySearch([FromQuery] string query, [FromQuery] string type)
+        {
+            return ProxySpotifyRequest($"search?q={Uri.EscapeDataString(query)}&type={Uri.EscapeDataString(type)}", HttpMethod.Get);
+        }
+        /*[HttpGet("spotify/apikey")]
+        public async Task<IActionResult> GetSpotifyApiKey()
+        {
+            var token = await GetSpotifyAPIToken();
+            return Ok(new { apiKey = token });
+        }*/
 
         [HttpGet("jellyseerr/sonarr")]
         public Task<IActionResult> GetSonarrInstances()
