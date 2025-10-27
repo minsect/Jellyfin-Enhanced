@@ -34,6 +34,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
 
         public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
         {
+
             await Task.Run(() =>
             {
                 RegisterFileTransformation();

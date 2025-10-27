@@ -296,12 +296,19 @@
                                 <label class="inputLabel inputLabelUnfocused" for="SpotifySearchMusicDirectory">Spotify Search Music Directory</label>
                                 <div style="display: flex; align-items: center; gap: 1em; margin-left: -1em;">
                                     <input id="SpotifySearchMusicDirectory" is="emby-input" name="SpotifySearchMusicDirectory" type="text" style="flex-grow: 1;"/>
-                                    <span id="jellyseerrStatusIndicator" class="material-icons" style="transition: color 0.3s ease;"></span>
-                                    <button is="emby-button" type="button" id="testJellyseerrBtn" class="raised button-submit">
+                                </div>
+                                <div class="fieldDescription">the library all music downloaded will output to.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="SpotifySLSKDKey">SLSKD API Key</label>
+                                <div style="display: flex; align-items: center; gap: 1em; margin-left: -1em;">
+                                    <input id="SpotifySLSKDKey" is="emby-input" name="SpotifySLSKDKey" type="text" style="flex-grow: 1;"/>
+                                    <span id="spotifyStatusIndicator" class="material-icons" style="transition: color 0.3s ease;"></span>
+                                    <button is="emby-button" type="button" id="testSpotifyIntegrationButton" class="raised button-submit">
                                         <span>Test</span>
                                     </button>
                                 </div>
-                                <div class="fieldDescription">the library all music downloaded will output to.</div>
+                                <div class="fieldDescription">SLSKD's API key</div>
                             </div>
 
                         </div>
@@ -457,6 +464,10 @@
             const shortcutErrorComment = document.getElementById('shortcut-error-comment');
 
             const testJellyseerrBtn = document.getElementById('testJellyseerrBtn');
+            
+            const testSpotifyIntegrationButton = document.getElementById('testSpotifyIntegrationButton');
+            const spotifyStatusIndicator = document.getElementById('spotifyStatusIndicator');
+            
             const jellyseerrStatusIndicator = document.getElementById('jellyseerrStatusIndicator');
 
             const testTmdbBtn = document.getElementById('testTmdbBtn');
@@ -692,6 +703,76 @@
             }
         }
 
+        async function testSpotifyIntegrationConnection() {
+            const urls = (document.querySelector('#SpotifySLSKDUrls').value || '').split('\n').map(u => u.trim()).filter(Boolean);
+            const apiKey = (document.querySelector('#SpotifySLSKDKey').value || '').trim();
+            const spotifyClientID = (document.querySelector('#SpotifyClientID').value || '').trim();
+            const spotifyClientSecret = (document.querySelector('#SpotifyClientSecret').value || '').trim();
+            const noSpotifyKeys = !spotifyClientID || !spotifyClientSecret;
+            const noSLSKDItems = !urls.length || !apiKey;
+            
+            if (noSpotifyKeys || noSLSKDItems) {
+                Dashboard.alert({ title: 'Missing Information', message: 'Please provide:' 
+                    + (noSpotifyKeys? "<br> - Spotify Client ID and Spotify Client Secret.": "")
+                    + (noSLSKDItems? "<br> - one SLSKD URL and an API key to test the connection.": "") });
+                return;
+            }
+
+            testSpotifyIntegrationButton.disabled = true;
+            spotifyStatusIndicator.textContent = 'sync';
+            spotifyStatusIndicator.className = 'material-icons status-check';
+            spotifyStatusIndicator.style.color = '#00a4dc';
+
+            let SLSKDValidated = false;
+            let SpotifyValidated = false;
+            for (const url of urls) {
+                try {
+                    const validationUrl = ApiClient.getUrl(`/JellyfinEnhanced/spotify/validateSLSKD`, {
+                        url: url,
+                        apiKey: apiKey
+                    });
+                    console.debug("Attempting to validate with URL:", validationUrl);
+
+                    const res = await ApiClient.ajax({ type: 'GET', url: validationUrl, dataType: 'json' });
+
+                    if (res && res.ok) {
+                        SLSKDValidated = true;
+                        break;
+                    }
+                } catch (e) {
+                    console.error(`SLSKD validation failed for ${url}:`, e);
+                }
+            }
+            try {
+                const validationUrl = ApiClient.getUrl(`/JellyfinEnhanced/spotify/validateSpotify`, {
+                    ClientID: spotifyClientID,
+                    ClientSecret: spotifyClientSecret
+                });
+                console.debug("Attempting to validate with URL:", validationUrl);
+
+                const res = await ApiClient.ajax({ type: 'GET', url: validationUrl, dataType: 'json' });
+
+                if (res && res.ok) {
+                    SpotifyValidated = true;
+                }
+            } catch (e) {
+                console.error(`Spotify validation failed:`, e);
+            }
+
+            testSpotifyIntegrationButton.disabled = false;
+            spotifyStatusIndicator.classList.remove('status-check');
+            
+            if (SLSKDValidated && SpotifyValidated) {
+                spotifyStatusIndicator.textContent = 'check_circle';
+                spotifyStatusIndicator.style.color = '#52b54b';
+                Dashboard.alert({ title: 'Success', message: 'Successfully connected to SLSKD & Spotify!' });
+            } else {
+                spotifyStatusIndicator.textContent = 'error';
+                spotifyStatusIndicator.style.color = '#dc3545';
+                Dashboard.alert({ title: 'Failiure', message: (!SLSKDValidated? "Could not validate the API key against any provided URL.": "")+(!SpotifyValidated? "<br>The Spotify client ID and/or client secret did not work.": "")+'<br><br>Please check the details.' });
+            }
+        }
+
         async function testTmdbConnection() {
             const apiKey = (document.querySelector('#TMDB_API_KEY').value || '').trim();
 
@@ -782,6 +863,8 @@
                 document.querySelector('#SpotifySLSKDUrls').value = config.SpotifySearchSLSKDUrls;
                 document.querySelector('#SpotifyClientID').value = config.SpotifyClientID;
                 document.querySelector('#SpotifyClientSecret').value = config.SpotifyClientSecret;
+                document.querySelector('#SpotifySLSKDKey').value = config.SpotifySearchSLSKDKey;
+                
 
                 document.querySelector('#arrLinksEnabled').checked = config.ArrLinksEnabled;
                 document.querySelector('#sonarrUrl').value = config.SonarrUrl;
@@ -849,6 +932,7 @@
             config.SpotifySearchSLSKDUrls = (document.querySelector('#SpotifySLSKDUrls').value || '').split('\n').map(u => u.trim()).filter(Boolean).join('\n');
             config.SpotifyClientID = document.querySelector('#SpotifyClientID').value
             config.SpotifyClientSecret = document.querySelector('#SpotifyClientSecret').value
+            config.SpotifySearchSLSKDKey = document.querySelector('#SpotifySLSKDKey').value
 
             config.ArrLinksEnabled = document.querySelector('#arrLinksEnabled').checked;
             config.SonarrUrl = document.querySelector('#sonarrUrl').value;
@@ -888,6 +972,7 @@
         form.addEventListener('submit', saveConfig);
         clearLocalStorageBtn.addEventListener('click', clearLocalStorage);
         testJellyseerrBtn.addEventListener('click', testJellyseerrConnection);
+        testSpotifyIntegrationButton.addEventListener('click', testSpotifyIntegrationConnection);
         testTmdbBtn.addEventListener('click', testTmdbConnection);
         const copyWatchlistHtmlBtn = document.querySelector('#copyWatchlistHtmlBtn');
         if (copyWatchlistHtmlBtn) {

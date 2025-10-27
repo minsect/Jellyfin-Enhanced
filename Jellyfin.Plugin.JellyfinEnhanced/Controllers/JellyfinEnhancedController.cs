@@ -163,9 +163,9 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             }
             var token = await GetSpotifyAPIToken();
             var config = JellyfinEnhanced.Instance?.Configuration;
-            if (config == null || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(config.SpotifySearchSLSKDUrls) || string.IsNullOrEmpty(config.SpotifySearchMusicDirectory) ) {
-                _logger.Warning("Spotify integration is not configured correctly or enabled.");
-                return StatusCode(503, "Spotify integration is not configured correctly or enabled.");
+            if (config == null || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(config.SpotifySearchSLSKDUrls) || string.IsNullOrEmpty(config.SpotifySearchSLSKDKey) || string.IsNullOrEmpty(config.SpotifySearchMusicDirectory) ) {
+                _logger.Warning("Spotify SLSKD integration is not configured correctly or enabled.");
+                return StatusCode(503, "Spotify SLSKD integration is not configured correctly or enabled.");
             }
 
             var httpClient = _httpClientFactory.CreateClient();
@@ -199,6 +199,104 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
                 var errorResponse = new { message = $"Upstream error from Spotify: {response.ReasonPhrase}" };
                 return StatusCode((int)response.StatusCode, errorResponse);
             }
+        }
+        private async Task<IActionResult> ProxySLSKDRequest(string apiPath, HttpMethod method, string? content = null)
+        {
+            var config = JellyfinEnhanced.Instance?.Configuration;
+            if (config == null || string.IsNullOrEmpty(config.SpotifySearchSLSKDUrls) || string.IsNullOrEmpty(config.SpotifySearchSLSKDKey) || string.IsNullOrEmpty(config.SpotifySearchMusicDirectory))
+            {
+                _logger.Warning("Spotify SLSKD integration is not configured or enabled.");
+                return StatusCode(503, "Spotify SLSKD integration is not configured or enabled.");
+            }
+
+            var urls = config.SpotifySearchSLSKDUrls.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var httpClient = _httpClientFactory.CreateClient();
+            httpClient.DefaultRequestHeaders.Add("X-Api-Key", config.SpotifySearchSLSKDKey);
+
+            foreach (var url in urls)
+            {
+                var trimmedUrl = url.Trim();
+                try
+                {
+                    var requestUri = $"{trimmedUrl.TrimEnd('/')}/api/v0/{apiPath}";
+                    _logger.Info($"Proxying SLSKD request to: {requestUri}");
+
+                    var request = new HttpRequestMessage(method, requestUri);
+                    if (content != null)
+                    {
+                        _logger.Info($"Request body: {content}");
+                        request.Content = new StringContent(content, Encoding.UTF8, "application/json");
+                    }
+
+                    var response = await httpClient.SendAsync(request);
+                    var responseContent = await response.Content.ReadAsStringAsync();
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        _logger.Info($"Successfully received response from SLSKD. Status: {response.StatusCode}");
+                        return Content(responseContent, "application/json");
+                    }
+
+                    _logger.Warning($"Request to SLSKD. URL: {trimmedUrl}, Status: {response.StatusCode}, Response: {responseContent}");
+                    // Try to parse the error as JSON, if it fails, create a new JSON error object.
+                    try
+                    {
+                        JsonDocument.Parse(responseContent);
+                        return StatusCode((int)response.StatusCode, responseContent);
+                    }
+                    catch (JsonException)
+                    {
+                        // The response was not valid JSON (e.g., HTML error page), so we create a standard error object.
+                        var errorResponse = new { message = $"Upstream error from SLSKD: {response.ReasonPhrase}" };
+                        return StatusCode((int)response.StatusCode, errorResponse);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"Failed to connect to SLSKD URL: {trimmedUrl}. Error: {ex.Message}");
+                }
+            }
+
+            return StatusCode(500, "Could not connect to any configured SLSKD instance.");
+        }
+
+        public async Task<IActionResult> SpotifyGetAlbum(string albumId, string[]? trackIdsWhitelist = null)
+        {   
+            var albumInfo = await ProxySpotifyRequest($"albums/{Uri.EscapeDataString(albumId)}", HttpMethod.Get) as ContentResult;
+            if (albumInfo?.Content == null) {
+                return StatusCode(502, new { ok = false, message = $"Album not found for {albumId}" });
+            }
+            var doc = JsonDocument.Parse(albumInfo.Content);
+            if (doc.RootElement.TryGetProperty("name", out var albumNameObject) && doc.RootElement.TryGetProperty("artists", out var albumArtistsObject) && doc.RootElement.TryGetProperty("tracks", out var albumTracksObject)) {
+                string? albumName = albumNameObject.GetString();
+                albumArtistsObject[0].TryGetProperty("name", out var mainArtistNameObject);
+                string? mainArtistName = mainArtistNameObject.GetString();
+                if (albumName == null || mainArtistName == null) {
+                    return StatusCode(502, new { ok = false, message = "Album or artist name not found! Cannot get download!" });
+                }
+                albumTracksObject.TryGetProperty("items", out var albumTrackItemsObject);
+                foreach (var trackObject in albumTrackItemsObject.EnumerateArray()) {
+                    trackObject.TryGetProperty("id", out var trackIdObject);
+                    string? trackId = trackIdObject.GetString();
+                    trackObject.TryGetProperty("name", out var trackNameObject);
+                    string? trackName = trackNameObject.GetString();
+                    if (trackId == null || trackName == null) {
+                        continue;
+                    }
+                    if (trackIdsWhitelist == null || trackIdsWhitelist.Length == 0 || trackIdsWhitelist.Contains(trackId)) {
+                        // either the track is whitelisted or there is no whitelist, so request a download for the track
+                        _ = Task.Run(async () => {
+                            string searchContent = JsonSerializer.Serialize(new {searchText = $"{mainArtistName} {trackName}"});
+                            var SLSKDSearchRequest = await ProxySLSKDRequest("searches", HttpMethod.Post, searchContent) as ContentResult;
+                        });
+                    }
+                }
+                
+
+                // This is where we request the album download and whitelist ONLY this track
+                return Ok(new { albumId = albumId });
+            }
+            return StatusCode(502, new { ok = false, message = "No album found! Cannot get download!" });
         }
 
         private async Task<IActionResult> ProxyJellyseerrRequest(string apiPath, HttpMethod method, string? content = null)
@@ -380,18 +478,6 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             return ProxyJellyseerrRequest($"/api/v1/search?query={Uri.EscapeDataString(query)}", HttpMethod.Get);
         }
 
-        [HttpGet("spotify/search")]
-        public Task<IActionResult> SpotifySearch([FromQuery] string query, [FromQuery] string type)
-        {
-            return ProxySpotifyRequest($"search?q={Uri.EscapeDataString(query)}&type={Uri.EscapeDataString(type)}", HttpMethod.Get);
-        }
-        /*[HttpGet("spotify/apikey")]
-        public async Task<IActionResult> GetSpotifyApiKey()
-        {
-            var token = await GetSpotifyAPIToken();
-            return Ok(new { apiKey = token });
-        }*/
-
         [HttpGet("jellyseerr/sonarr")]
         public Task<IActionResult> GetSonarrInstances()
         {
@@ -431,6 +517,93 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         public async Task<IActionResult> RequestTvSeasons(int tmdbId, [FromBody] JsonElement requestBody)
         {
             return await ProxyJellyseerrRequest($"/api/v1/request", HttpMethod.Post, requestBody.ToString());
+        }
+
+        [HttpGet("spotify/search")]
+        public async Task<IActionResult> SpotifySearch([FromQuery] string query, [FromQuery] string type)
+        {
+            return await ProxySpotifyRequest($"search?q={Uri.EscapeDataString(query)}&type={Uri.EscapeDataString(type)}", HttpMethod.Get);
+        }
+
+        [HttpGet("spotify/slskdSearch")]
+        public async Task<IActionResult> SpotifySearch([FromQuery] string query)
+        {
+            string searchContent = JsonSerializer.Serialize(new {searchText = query});
+            return await ProxySLSKDRequest("searches", HttpMethod.Post, searchContent);
+            //return await ProxySpotifyRequest($"search?q={Uri.EscapeDataString(query)}&type={Uri.EscapeDataString(type)}", HttpMethod.Get);
+        }
+        
+        [HttpGet("spotify/requestTrack/{trackId}")]
+        public async Task<IActionResult> SpotifyRequestTrack(string trackId)
+        {
+            
+            var trackInfo = await ProxySpotifyRequest($"tracks/{Uri.EscapeDataString(trackId)}", HttpMethod.Get) as ContentResult;
+            if (trackInfo?.Content == null) {
+                return StatusCode(502, new { ok = false, message = $"Track not found for {trackId}" });
+            }
+            var doc = JsonDocument.Parse(trackInfo.Content);
+            if (doc.RootElement.TryGetProperty("album", out var albumObject) && albumObject.TryGetProperty("id", out var albumIdObject)) {
+                string albumId = albumIdObject.GetString() ?? "";
+                await SpotifyGetAlbum(albumId);
+                // This is where we request the album download and whitelist ONLY this track
+                return Ok(new { albumId = albumId });
+            }
+            return StatusCode(502, new { ok = false, message = "No parent album found! Cannot get download!" });
+        }
+
+        [HttpGet("spotify/validateSLSKD")]
+        public async Task<IActionResult> ValidateSLSKD([FromQuery] string url, [FromQuery] string apiKey)
+        {
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
+                return BadRequest(new { ok = false, message = "Missing url or apiKey" });
+
+            var http = _httpClientFactory.CreateClient();
+            http.DefaultRequestHeaders.Clear();
+            http.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+
+            try
+            {
+                var resp = await http.GetAsync($"{url.TrimEnd('/')}/api/v0/searches");
+                if (resp.IsSuccessStatusCode)
+                    return Ok(new { ok = true });
+
+                return StatusCode((int)resp.StatusCode, new { ok = false, message = "Status check failed" });
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"SLSKD validate failed for {url}: {ex.Message}");
+                return StatusCode(502, new { ok = false, message = "Unable to reach SLSKD" });
+            }
+        }
+
+        [HttpGet("spotify/validateSpotify")]
+        public async Task<IActionResult> ValidateSpotify([FromQuery] string clientID, [FromQuery] string clientSecret)
+        {
+            if (string.IsNullOrWhiteSpace(clientID) || string.IsNullOrWhiteSpace(clientSecret))
+                return BadRequest(new { ok = false, message = "Missing client ID or client Secret" });
+
+            var httpClient = _httpClientFactory.CreateClient();
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://accounts.spotify.com/api/token");
+            request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                { "grant_type", "client_credentials" },
+                { "client_id", clientID },
+                { "client_secret", clientSecret }
+            });
+
+            try
+            {
+                var resp = await httpClient.SendAsync(request);
+                if (resp.IsSuccessStatusCode)
+                    return Ok(new { ok = true });
+
+                return StatusCode((int)resp.StatusCode, new { ok = false, message = "Status check failed" });
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Spotify validate failed: {ex.Message}");
+                return StatusCode(502, new { ok = false, message = "Unable to reach Spotify" });
+            }
         }
 
         [HttpGet("tmdb/validate")]
