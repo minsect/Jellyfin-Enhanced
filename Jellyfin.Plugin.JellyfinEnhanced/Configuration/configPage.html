@@ -293,11 +293,18 @@
                                 <div class="fieldDescription">You can find this in spotify developer stuff</div>
                             </div>
                             <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="SpotifySearchMusicDirectory">Spotify Search Music Directory</label>
+                                <label class="inputLabel inputLabelUnfocused" for="SpotifySearchMusicDirectory">Music Library Directory</label>
                                 <div style="display: flex; align-items: center; gap: 1em; margin-left: -1em;">
                                     <input id="SpotifySearchMusicDirectory" is="emby-input" name="SpotifySearchMusicDirectory" type="text" style="flex-grow: 1;"/>
                                 </div>
                                 <div class="fieldDescription">the library all music downloaded will output to.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="SpotifySearchSLSKDDownloadsDirectory">SLSKD Downloads directory</label>
+                                <div style="display: flex; align-items: center; gap: 1em; margin-left: -1em;">
+                                    <input id="SpotifySearchSLSKDDownloadsDirectory" is="emby-input" name="SpotifySearchSLSKDDownloadsDirectory" type="text" style="flex-grow: 1;"/>
+                                </div>
+                                <div class="fieldDescription">the directory which all SLSKD downloads are present</div>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="SpotifySLSKDKey">SLSKD API Key</label>
@@ -310,7 +317,6 @@
                                 </div>
                                 <div class="fieldDescription">SLSKD's API key</div>
                             </div>
-
                         </div>
                     </fieldset>
                 </div>
@@ -864,6 +870,7 @@
                 document.querySelector('#SpotifyClientID').value = config.SpotifyClientID;
                 document.querySelector('#SpotifyClientSecret').value = config.SpotifyClientSecret;
                 document.querySelector('#SpotifySLSKDKey').value = config.SpotifySearchSLSKDKey;
+                document.querySelector('#SpotifySearchSLSKDDownloadsDirectory').value = config.SpotifySearchSLSKDDownloadsDirectory;
                 
 
                 document.querySelector('#arrLinksEnabled').checked = config.ArrLinksEnabled;
@@ -933,6 +940,7 @@
             config.SpotifyClientID = document.querySelector('#SpotifyClientID').value
             config.SpotifyClientSecret = document.querySelector('#SpotifyClientSecret').value
             config.SpotifySearchSLSKDKey = document.querySelector('#SpotifySLSKDKey').value
+            config.SpotifySearchSLSKDDownloadsDirectory = document.querySelector('#SpotifySearchSLSKDDownloadsDirectory').value
 
             config.ArrLinksEnabled = document.querySelector('#arrLinksEnabled').checked;
             config.SonarrUrl = document.querySelector('#sonarrUrl').value;

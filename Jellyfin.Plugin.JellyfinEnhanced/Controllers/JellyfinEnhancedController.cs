@@ -43,7 +43,8 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         private readonly ILibraryManager _libraryManager;
         private readonly IDtoService _dtoService;
         private readonly IMemoryCache _memoryCache;
-        public JellyfinEnhancedController(IHttpClientFactory httpClientFactory, Logger logger, IUserManager userManager, IUserDataManager userDataManager, ILibraryManager libraryManager, IDtoService dtoService, IMemoryCache memoryCache)
+        private readonly SLSKDStore _SLSKDStore;
+        public JellyfinEnhancedController(IHttpClientFactory httpClientFactory, Logger logger, IUserManager userManager, IUserDataManager userDataManager, ILibraryManager libraryManager, IDtoService dtoService, IMemoryCache memoryCache, SLSKDStore store)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
@@ -52,6 +53,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             _libraryManager = libraryManager;
             _dtoService = dtoService;
             _memoryCache = memoryCache;
+            _SLSKDStore = store;
         }
 
         private async Task<string?> GetJellyseerrUserId(string jellyfinUserId)
@@ -288,6 +290,22 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
                         _ = Task.Run(async () => {
                             string searchContent = JsonSerializer.Serialize(new {searchText = $"{mainArtistName} {trackName}"});
                             var SLSKDSearchRequest = await ProxySLSKDRequest("searches", HttpMethod.Post, searchContent) as ContentResult;
+                            if (SLSKDSearchRequest?.Content != null) {
+                                var SLSKDSearchDoc = JsonDocument.Parse(SLSKDSearchRequest.Content);
+                                SLSKDSearchDoc.RootElement.TryGetProperty("id", out var SLSKDSearchIDObject);
+                                string? SLSKDSearchId = SLSKDSearchIDObject.GetString();
+                                if (SLSKDSearchId != null) {
+                                    var slskdRequest = new SLSKDRequest
+                                    {
+                                        SpotifyTrackId = trackId,
+                                        SLSKDSearchId = SLSKDSearchId,
+                                        TrackName = trackName,
+                                        AlbumName = albumName,
+                                        Artists = albumArtistsObject.EnumerateArray().Select(artist => artist.GetProperty("name").GetString() ?? "").ToArray()
+                                    };
+                                    _SLSKDStore.AddRequest(slskdRequest);
+                                }
+                            }
                         });
                     }
                 }
@@ -532,20 +550,38 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             return await ProxySLSKDRequest("searches", HttpMethod.Post, searchContent);
             //return await ProxySpotifyRequest($"search?q={Uri.EscapeDataString(query)}&type={Uri.EscapeDataString(type)}", HttpMethod.Get);
         }
-        
+
         [HttpGet("spotify/requestTrack/{trackId}")]
         public async Task<IActionResult> SpotifyRequestTrack(string trackId)
         {
-            
+
             var trackInfo = await ProxySpotifyRequest($"tracks/{Uri.EscapeDataString(trackId)}", HttpMethod.Get) as ContentResult;
-            if (trackInfo?.Content == null) {
+            if (trackInfo?.Content == null)
+            {
                 return StatusCode(502, new { ok = false, message = $"Track not found for {trackId}" });
             }
             var doc = JsonDocument.Parse(trackInfo.Content);
-            if (doc.RootElement.TryGetProperty("album", out var albumObject) && albumObject.TryGetProperty("id", out var albumIdObject)) {
+            if (doc.RootElement.TryGetProperty("album", out var albumObject) && albumObject.TryGetProperty("id", out var albumIdObject))
+            {
                 string albumId = albumIdObject.GetString() ?? "";
-                await SpotifyGetAlbum(albumId);
+                await SpotifyGetAlbum(albumId, [trackId]);
                 // This is where we request the album download and whitelist ONLY this track
+                return Ok(new { albumId = albumId });
+            }
+            return StatusCode(502, new { ok = false, message = "No parent album found! Cannot get download!" });
+        }
+        
+        [HttpGet("spotify/requestAlbum/{albumId}")]
+        public async Task<IActionResult> SpotifyRequestAlbum(string albumId)
+        {
+            
+            var trackInfo = await ProxySpotifyRequest($"albums/{Uri.EscapeDataString(albumId)}", HttpMethod.Get) as ContentResult;
+            if (trackInfo?.Content == null) {
+                return StatusCode(502, new { ok = false, message = $"Track not found for {albumId}" });
+            }
+            var doc = JsonDocument.Parse(trackInfo.Content);
+            if (doc.RootElement.TryGetProperty("id", out var albumIdObject)) {
+                await SpotifyGetAlbum(albumId);
                 return Ok(new { albumId = albumId });
             }
             return StatusCode(502, new { ok = false, message = "No parent album found! Cannot get download!" });

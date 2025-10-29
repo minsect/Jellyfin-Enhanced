@@ -9,9 +9,11 @@ namespace Jellyfin.Plugin.JellyfinEnhanced
     {
         public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
         {
+            serviceCollection.AddHostedService<SLSKDService>();
             serviceCollection.AddSingleton<StartupService>();
             serviceCollection.AddHttpClient();
             serviceCollection.AddSingleton<Logger>();
+            serviceCollection.AddSingleton<SLSKDStore>();
         }
     }
 }

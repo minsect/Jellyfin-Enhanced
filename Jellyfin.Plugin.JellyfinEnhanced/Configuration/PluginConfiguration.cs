@@ -86,6 +86,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
             SpotifyClientID = "";
             SpotifyClientSecret = "";
             SpotifySearchSLSKDKey = "";
+            SpotifySearchSLSKDDownloadsDirectory = "";
 
             // Arr Links Settings
             ArrLinksEnabled = false;
@@ -150,6 +151,8 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
         public string SpotifySearchSLSKDUrls { get; set; }
         public string SpotifySearchSLSKDKey { get; set; }
         public string SpotifySearchMusicDirectory { get; set; }
+        public string SpotifySearchSLSKDDownloadsDirectory { get; set; }
+        
         public string SpotifyClientID { get; set; }
         public string SpotifyClientSecret { get; set; }
 
