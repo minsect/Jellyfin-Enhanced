@@ -10,9 +10,4 @@ public class SLSKDRequest
     public int DownloadAttempts { get; set; } = 0;
     public string AlbumName { get; set; } = string.Empty;
     public long Size { get; set; } = 0;
-
-    public static implicit operator SLSKDRequest(SLSKDRequest v)
-    {
-        throw new NotImplementedException();
-    }
 }
