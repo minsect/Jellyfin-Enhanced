@@ -24,22 +24,11 @@
      * @param {number} [duration=JE.CONFIG.TOAST_DURATION] The duration to show the toast.
      */
     JE.toast = (key, duration = JE.CONFIG.TOAST_DURATION) => {
-        const getJellyfinThemeVariable = (variableName, defaultValue) => {
-            const rootStyle = getComputedStyle(document.documentElement);
-            const value = rootStyle.getPropertyValue(variableName).trim();
-            return value ? value : defaultValue;
-        };
-
-        const isJellyfishThemeActive = getJellyfinThemeVariable('--theme-updated-on', '') !== '' || getJellyfinThemeVariable('--theme-name', '').toLowerCase().includes('jellyfish');
-        let toastBg, toastBorder;
-
-        if (isJellyfishThemeActive) {
-            toastBg = getJellyfinThemeVariable('--secondary-background-transparent', 'rgba(0,0,0,0.6)');
-            toastBorder = `1px solid ${getJellyfinThemeVariable('--primary-accent-color', 'rgba(255,255,255,0.1)')}`;
-        } else {
-            toastBg = 'linear-gradient(135deg, rgba(0,0,0,0.9), rgba(40,40,40,0.9))';
-            toastBorder = '1px solid rgba(255,255,255,0.1)';
-        }
+        // Use the theme system to get appropriate colors
+        const themeVars = JE.themer?.getThemeVariables() || {};
+        const toastBg = themeVars.secondaryBg || 'linear-gradient(135deg, rgba(0,0,0,0.9), rgba(40,40,40,0.9))';
+        const toastBorder = `1px solid ${themeVars.primaryAccent || 'rgba(255,255,255,0.1)'}`;
+        const blurValue = themeVars.blur || '30px';
 
         const t = document.createElement('div');
         t.className = 'jellyfin-enhanced-toast';
@@ -57,7 +46,7 @@
             textShadow: '-1px -1px 10px black',
             fontWeight: '500',
             boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-            backdropFilter: `blur(30px)`,
+            backdropFilter: `blur(${blurValue})`,
             border: toastBorder,
             transition: 'transform 0.3s ease-out',
             maxWidth: 'clamp(280px, 80vw, 350px)'
@@ -100,7 +89,7 @@
 
         const closePanel = () => {
             if (document.getElementById(notificationId)) {
-                notification.style.transform = 'translateX(100%)';
+                notification.style.transform = 'translateY(-50%) translateX(100%)';
                 setTimeout(() => notification.remove(), 300);
             }
         };
@@ -123,32 +112,20 @@
             resetAutoCloseTimer();
         });
 
-        const getJellyfinThemeVariable = (variableName, defaultValue) => {
-            const rootStyle = getComputedStyle(document.documentElement);
-            const value = rootStyle.getPropertyValue(variableName).trim();
-            return value || defaultValue;
-        };
-
-        const isJellyfishThemeActive = getJellyfinThemeVariable('--theme-updated-on', '') !== '' || getJellyfinThemeVariable('--theme-name', '').toLowerCase().includes('jellyfish');
-
-        let panelBg, panelBorder, textColor;
-        if (isJellyfishThemeActive) {
-            panelBg = getJellyfinThemeVariable('--primary-background-transparent', 'rgba(0,0,0,0.95)');
-            panelBorder = `1px solid ${getJellyfinThemeVariable('--primary-accent-color', 'rgba(255,255,255,0.1)')}`;
-            textColor = getJellyfinThemeVariable('--text-color', '#fff');
-        } else {
-            panelBg = 'linear-gradient(135deg, rgba(0,0,0,0.95), rgba(20,20,20,0.95))';
-            panelBorder = '1px solid rgba(255,255,255,0.1)';
-            textColor = '#fff';
-        }
+        // Get styles from themer
+        const themeVars = JE.themer?.getThemeVariables() || {};
+        const panelBg = themeVars.panelBg;
+        const panelBorder = `1px solid ${themeVars.primaryAccent}`;
+        const textColor = themeVars.textColor;
 
         Object.assign(notification.style, {
             position: 'fixed',
-            top: '20px',
+            top: '50%',
             right: '20px',
+            transform: 'translateY(-50%) translateX(100%)',
             background: panelBg,
             color: textColor,
-            padding: '20px',
+            padding: '0',
             borderRadius: '12px',
             zIndex: 999999,
             fontSize: '14px',
@@ -156,60 +133,84 @@
             boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
             backdropFilter: `blur(50px)`,
             border: panelBorder,
-            maxWidth: '500px',
-            transform: 'translateX(100%)',
+            width: '600px',
+            maxWidth: '90vw',
+            maxHeight: '85vh',
             transition: 'transform 0.3s ease-out',
-            fontFamily: 'inherit'
+            fontFamily: 'inherit',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
         });
 
         const markdownToHtml = (text) => {
             if (!text) return '';
             return text
-                // Blockquotes
-                .replace(/^>\s*\[!NOTE\]\s*\r?\n((?:>.*(?:\r?\n|$))+)/gm, (match, content) => {
+                // Blockquotes with callouts (WARNING, NOTE, etc.)
+                .replace(/^>\s*\[!(WARNING|NOTE|TIP|IMPORTANT)\]\s*\r?\n((?:>.*(?:\r?\n|$))+)/gm, (match, type, content) => {
                     const noteContent = content.replace(/^>\s?/gm, '');
-                    return `<div style="padding: 10px; border-left: 4px solid #f0ad4e; background-color: rgba(240, 173, 78, 0.1); margin: 10px 0;"><strong>NOTE:</strong><br>${noteContent}</div>`;
+                    const colors = {
+                        WARNING: { border: '#f0ad4e', bg: 'rgba(240, 173, 78, 0.1)', icon: '⚠️' },
+                        NOTE: { border: '#00a4dc', bg: 'rgba(0, 164, 220, 0.1)', icon: '📝' },
+                        TIP: { border: '#28a745', bg: 'rgba(40, 167, 69, 0.1)', icon: '💡' },
+                        IMPORTANT: { border: '#dc3545', bg: 'rgba(220, 53, 69, 0.1)', icon: '❗' }
+                    };
+                    const style = colors[type] || colors.NOTE;
+                    return `<div style="padding: 12px 16px; border-left: 4px solid ${style.border}; background-color: ${style.bg}; margin: 12px 0; border-radius: 4px;"><strong>${style.icon} ${type}:</strong><br>${noteContent}</div>`;
                 })
-                // Headings (with reduced margins)
-                .replace(/^## (.*$)/gm, '<h3 style="font-size: 1.2em; margin: 0.75em 0 0;">$1</h3>')
-                .replace(/^# (.*$)/gm, '<h2 style="font-size: 1.4em; margin: 0.75em 0 0;">$1</h2>')
+                // Headings (with better spacing)
+                .replace(/^### (.*$)/gm, '<h4 style="font-size: 1.1em; margin: 1em 0 0 0; font-weight: 600; color: rgba(255,255,255,0.9);">$1</h4>')
+                .replace(/^## (.*$)/gm, '<h3 style="font-size: 1.25em; margin: 1.2em 0 0 0; font-weight: 600; color: rgba(255,255,255,0.95);">$1</h3>')
+                .replace(/^# (.*$)/gm, '<h2 style="font-size: 1.4em; margin: 1.2em 0 0 0; font-weight: 700;">$1</h2>')
+                // Code blocks (inline)
+                .replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 0.9em;">$1</code>')
                 // Links
-                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: var(--primary-accent-color, #00a4dc); text-decoration: none;">$1</a>')
+                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: var(--primary-accent-color, #00a4dc); text-decoration: underline; text-decoration-color: rgba(0, 164, 220, 0.3);">$1</a>')
                 // Bold and Italic
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                // Lists (simple)
-                .replace(/^\* (.*$)/gm, (match, item) => `<ul><li style="margin-left: 20px;">${item}</li></ul>`)
-                .replace(/<\/ul>\s*<ul>/g, '') // Merge adjacent lists that were separated by a newline
-                // General newlines
+                .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                // Numbered lists
+                .replace(/^\d+\.\s+(.*)$/gm, (match, item) => `<ol style="margin: 0; padding-left: 20px;"><li style="margin: 4px 0;">${item}</li></ol>`)
+                .replace(/<\/ol>\s*<ol[^>]*>/g, '') // Merge adjacent numbered lists
+                // Bullet lists
+                .replace(/^[-*]\s+(.*)$/gm, (match, item) => `<ul style="margin: 0; padding-left: 20px;"><li style="margin: 4px 0;">${item}</li></ul>`)
+                .replace(/<\/ul>\s*<ul[^>]*>/g, '') // Merge adjacent lists
+                // Handle backslash at end of line as line break (markdown line break)
+                .replace(/\\\s*\n/g, '<br>')
+                // General newlines (double newline - paragraph break, single - line break)
+                .replace(/\n\n+/g, '<br><br>')
                 .replace(/\n/g, '<br>')
-                // Collapse multiple line breaks into one to reduce gaps
-                .replace(/(<br>\s*){2,}/g, '<br>');
+                // Collapse excessive line breaks (max 2)
+                .replace(/(<br>\s*){3,}/g, '<br><br>');
         };
 
         const releaseNotes = release.body ?
-            (release.body.length > 1500 ? release.body.substring(0, 200) + '...' : release.body) :
+            (release.body.length > 3000 ? release.body.substring(0, 3000) + '...' : release.body) :
             'No release notes available.';
 
         notification.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                <div style="width: 40px; height: 40px; background: #3e74f2bd; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px;">📋</div>
-                <div>
-                    <div style="font-weight: 600; font-size: 16px; color: #779aeadc;">Latest Release Notes</div>
-                    <div style="font-size: 12px; color: rgba(255,255,255,0.7);">${release.tag_name}</div>
+            <div style="padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                    <div style="width: 40px; height: 40px; background: #3e74f2bd; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px;">📋</div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; font-size: 16px; color: #779aeadc;">Latest Release Notes</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.7);">${release.tag_name} - ${new Date(release.published_at).toLocaleDateString()}</div>
+                    </div>
+                    <button onclick="this.closest('#jellyfin-release-notes-notification').remove()" style="background: rgba(255,255,255,0.1); border: none; color: #fff; font-size: 20px; cursor: pointer; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">×</button>
                 </div>
             </div>
-            <div style="margin-bottom: 17px; font-size: 13px; color: rgba(255,255,255,0.8); line-height: 1.4; max-height: 300px; overflow-y: auto;">
+            <div style="flex: 1; overflow-y: auto; padding: 20px; font-size: 13px; color: rgba(255,255,255,0.85); line-height: 1.6;">
                 ${markdownToHtml(releaseNotes)}
             </div>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <a href="${release.html_url}" target="_blank" style="background: #3e74f2bd; border: 1px solid #779aeadc; color: white; text-decoration: none; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 500;">View on GitHub</a>
-                <button onclick="this.parentElement.parentElement.remove()" style="background: #f25151b5; border: 1px solid #f2515133; color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-family: inherit; font-weight: 500; cursor: pointer;">✕ Close</button>
+            <div style="padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 10px; flex-shrink: 0; background: rgba(0,0,0,0.2);">
+                <a href="${release.html_url}" target="_blank" style="flex: 1; background: #3e74f2bd; border: 1px solid #779aeadc; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; text-align: center; transition: background 0.2s;" onmouseover="this.style.background='#5284f3'" onmouseout="this.style.background='#3e74f2bd'">View Full Release on GitHub</a>
+                <button onclick="this.closest('#jellyfin-release-notes-notification').remove()" style="background: #f25151b5; border: 1px solid #f2515133; color: white; padding: 10px 16px; border-radius: 6px; font-size: 13px; font-family: inherit; font-weight: 500; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f36161'" onmouseout="this.style.background='#f25151b5'">Close</button>
             </div>
         `;
 
         document.body.appendChild(notification);
-        setTimeout(() => { notification.style.transform = 'translateX(0)'; }, 10);
+        setTimeout(() => { notification.style.transform = 'translateY(-50%) translateX(0)'; }, 10);
 
         resetAutoCloseTimer();
     }
@@ -340,45 +341,25 @@
             existing.remove();
             return;
         }
-        // Get the Jellyfish theme variables to apply consistent styles.
-        const getJellyfinThemeVariable = (variableName, defaultValue) => {
-            const rootStyle = getComputedStyle(document.documentElement);
-            const value = rootStyle.getPropertyValue(variableName).trim();
-            return value ? value : defaultValue;
-        };
+        // Get theme-appropriate styles
+        const themeVars = JE.themer.getThemeVariables();
+        const currentTheme = JE.themer.activeTheme;
 
-        const isJellyfishThemeActive = getJellyfinThemeVariable('--theme-updated-on', '') !== '' || getJellyfinThemeVariable('--theme-name', '').toLowerCase().includes('jellyfish');
-        let panelBgColor, secondaryBg, headerFooterBg, primaryAccentColor, toggleAccentColor, kbdBackground, presetBoxBackground, detailsBackground, panelBlurValue, githubButtonBg, releaseNotesBg, checkUpdatesBorder, releaseNotesTextColor, logoUrl;
-        if (isJellyfishThemeActive) {
-            panelBgColor = getJellyfinThemeVariable('--primary-background-transparent', 'rgba(0,0,0,0.95)');
-            secondaryBg = getJellyfinThemeVariable('--secondary-background-transparent', 'rgba(0,0,0,0.2)');
-            headerFooterBg = secondaryBg;
-            detailsBackground = secondaryBg;
-            primaryAccentColor = getJellyfinThemeVariable('--primary-accent-color', '#00A4DC');
-            toggleAccentColor = primaryAccentColor;
-            kbdBackground = getJellyfinThemeVariable('--alt-accent-color', '#ffffff20');
-            presetBoxBackground = getJellyfinThemeVariable('--alt-accent-color', '#ffffff20');
-            panelBlurValue = getJellyfinThemeVariable('--blur', '20px');
-            githubButtonBg = 'rgba(102, 179, 255, 0.1)';
-            releaseNotesBg = primaryAccentColor;
-            checkUpdatesBorder = `1px solid ${primaryAccentColor}`;
-            releaseNotesTextColor = getJellyfinThemeVariable('--text-color', '#000000');
-            const rawLogoValue = getJellyfinThemeVariable('--logo', '');
-            logoUrl = rawLogoValue.replace(/url\(['"]?(.*?)['"]?\)/i, '$1');
-        } else {
-            panelBgColor = 'linear-gradient(135deg, rgba(0,0,0,0.95), rgba(20,20,20,0.95))';
-            headerFooterBg = 'linear-gradient(135deg, rgba(0,0,0,0.95), rgba(20,20,20,0.95))';
-            detailsBackground = 'rgba(0,0,0,0.2)';
-            primaryAccentColor = '#00A4DC';
-            toggleAccentColor = '#AA5CC3';
-            kbdBackground = 'rgba(255,255,255,0.1)';
-            presetBoxBackground = 'rgba(255,255,255,0.05)';
-            panelBlurValue = '20px';
-            githubButtonBg = 'rgba(102, 179, 255, 0.1)';
-            releaseNotesBg = 'linear-gradient(135deg, #AA5CC3, #00A4DC)';
-            checkUpdatesBorder = `1px solid ${primaryAccentColor}`;
-            releaseNotesTextColor = '#FFFFFF';
-        }
+        // Define theme-aware variables
+        const panelBgColor = themeVars.panelBg;
+        const secondaryBg = themeVars.secondaryBg;
+        const headerFooterBg = themeVars.secondaryBg;
+        const detailsBackground = themeVars.secondaryBg;
+        const primaryAccentColor = themeVars.primaryAccent;
+        const toggleAccentColor = primaryAccentColor;
+        const kbdBackground = themeVars.altAccent;
+        const presetBoxBackground = themeVars.altAccent;
+        const panelBlurValue = themeVars.blur;
+        const githubButtonBg = `rgba(102, 179, 255, 0.1)`;
+        const releaseNotesBg = primaryAccentColor;
+        const checkUpdatesBorder = `1px solid ${primaryAccentColor}`;
+        const releaseNotesTextColor = themeVars.textColor;
+        const logoUrl = themeVars.logo;
 
         const help = document.createElement('div');
         help.id = panelId;
@@ -406,7 +387,9 @@
             flexDirection: 'column'
         });
 
-        const shortcuts = JE.pluginConfig.Shortcuts.reduce((acc, s) => ({ ...acc, [s.Name]: s }), {});
+        const pluginShortcuts = Array.isArray(JE.pluginConfig.Shortcuts) ? JE.pluginConfig.Shortcuts : [];
+        const shortcuts = pluginShortcuts.reduce((acc, s) => ({ ...acc, [s.Name]: s }), {});
+
         // --- Draggable Panel Logic ---------
         let isDragging = false;
         let offset = { x: 0, y: 0 };
@@ -478,7 +461,11 @@
             }).join('');
         };
 
-        const userShortcuts = JE.userShortcutManager.load();
+        const userShortcuts = (JE.userConfig.shortcuts.Shortcuts || []).reduce((acc, s) => {
+            acc[s.Name] = s;
+            return acc;
+        }, {});
+
         help.innerHTML = `
             <style>
                 #jellyfin-enhanced-panel .tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); }
@@ -638,15 +625,45 @@
                                 </label>
                             </div>
                             <div style="margin-bottom: 16px; padding: 12px; background: ${presetBoxBackground}; border-radius: 6px; border-left: 3px solid ${toggleAccentColor};">
-                                <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
-                                    <input type="checkbox" id="qualityTagsToggle" ${JE.currentSettings.qualityTagsEnabled ? 'checked' : ''} style="width:18px; height:18px; accent-color:${toggleAccentColor}; cursor:pointer;">
-                                    <div><div style="font-weight:500;">${JE.t('panel_settings_ui_quality_tags')}</div><div style="font-size:12px; color:rgba(255,255,255,0.6); margin-top:2px;">${JE.t('panel_settings_ui_quality_tags_desc')}</div></div>
+                                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <input type="checkbox" id="qualityTagsToggle" ${JE.currentSettings.qualityTagsEnabled ? 'checked' : ''} style="width:18px; height:18px; accent-color:${toggleAccentColor}; cursor:pointer;">
+                                        <div><div style="font-weight:500;">${JE.t('panel_settings_ui_quality_tags')}</div><div style="font-size:12px; color:rgba(255,255,255,0.6); margin-top:2px;">${JE.t('panel_settings_ui_quality_tags_desc')}</div></div>
+                                    </div>
+                                    <div class="position-selector" data-setting="qualityTagsPosition" style="display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:2px; width:32px; height:32px; border:1px solid rgba(255,255,255,0.3); border-radius:4px; padding:3px; cursor:pointer; flex-shrink:0;" title="Click to change position">
+                                        <div data-pos="top-left" style="border-radius:2px; transition:background 0.2s;"></div>
+                                        <div data-pos="top-right" style="border-radius:2px; transition:background 0.2s;"></div>
+                                        <div data-pos="bottom-left" style="border-radius:2px; transition:background 0.2s;"></div>
+                                        <div data-pos="bottom-right" style="border-radius:2px; transition:background 0.2s;"></div>
+                                    </div>
                                 </label>
                             </div>
                             <div style="margin-bottom: 16px; padding: 12px; background: ${presetBoxBackground}; border-radius: 6px; border-left: 3px solid ${toggleAccentColor};">
-                                <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
-                                    <input type="checkbox" id="genreTagsToggle" ${JE.currentSettings.genreTagsEnabled ? 'checked' : ''} style="width:18px; height:18px; accent-color:${toggleAccentColor}; cursor:pointer;">
-                                    <div><div style="font-weight:500;">${JE.t('panel_settings_ui_genre_tags')}</div><div style="font-size:12px; color:rgba(255,255,255,0.6); margin-top:2px;">${JE.t('panel_settings_ui_genre_tags_desc')}</div></div>
+                                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <input type="checkbox" id="genreTagsToggle" ${JE.currentSettings.genreTagsEnabled ? 'checked' : ''} style="width:18px; height:18px; accent-color:${toggleAccentColor}; cursor:pointer;">
+                                        <div><div style="font-weight:500;">${JE.t('panel_settings_ui_genre_tags')}</div><div style="font-size:12px; color:rgba(255,255,255,0.6); margin-top:2px;">${JE.t('panel_settings_ui_genre_tags_desc')}</div></div>
+                                    </div>
+                                    <div class="position-selector" data-setting="genreTagsPosition" style="display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:2px; width:32px; height:32px; border:1px solid rgba(255,255,255,0.3); border-radius:4px; padding:3px; cursor:pointer; flex-shrink:0;" title="Click to change position">
+                                        <div data-pos="top-left" style="border-radius:2px; transition:background 0.2s;"></div>
+                                        <div data-pos="top-right" style="border-radius:2px; transition:background 0.2s;"></div>
+                                        <div data-pos="bottom-left" style="border-radius:2px; transition:background 0.2s;"></div>
+                                        <div data-pos="bottom-right" style="border-radius:2px; transition:background 0.2s;"></div>
+                                    </div>
+                                </label>
+                            </div>
+                            <div style="margin-bottom: 16px; padding: 12px; background: ${presetBoxBackground}; border-radius: 6px; border-left: 3px solid ${toggleAccentColor};">
+                                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                                    <div style="display: flex; align-items: center; gap: 12px;">
+                                        <input type="checkbox" id="languageTagsToggle" ${JE.currentSettings.languageTagsEnabled ? 'checked' : ''} style="width:18px; height:18px; accent-color:${toggleAccentColor}; cursor:pointer;">
+                                        <div><div style="font-weight:500;">${JE.t('panel_settings_ui_language_tags')}</div><div style="font-size:12px; color:rgba(255,255,255,0.6); margin-top:2px;">${JE.t('panel_settings_ui_language_tags_desc')}</div></div>
+                                    </div>
+                                    <div class="position-selector" data-setting="languageTagsPosition" style="display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:2px; width:32px; height:32px; border:1px solid rgba(255,255,255,0.3); border-radius:4px; padding:3px; cursor:pointer; flex-shrink:0;" title="Click to change position">
+                                        <div data-pos="top-left" style="border-radius:2px; transition:background 0.2s;"></div>
+                                        <div data-pos="top-right" style="border-radius:2px; transition:background 0.2s;"></div>
+                                        <div data-pos="bottom-left" style="border-radius:2px; transition:background 0.2s;"></div>
+                                        <div data-pos="bottom-right" style="border-radius:2px; transition:background 0.2s;"></div>
+                                    </div>
                                 </label>
                             </div>
                             <div style="padding: 12px; background: ${presetBoxBackground}; border-radius: 6px; border-left: 3px solid ${toggleAccentColor};">
@@ -671,6 +688,17 @@
         `;
 
         document.body.appendChild(help);
+
+        /**
+        * Remove this when removing support for Migration
+        */
+        // Hook for migrate.js to add its button
+        if (typeof JE.addMigrationButton === 'function') {
+            JE.addMigrationButton(help);
+        }
+        /**
+        * Remove this when removing support for Migration
+        */
 
         // --- Shortcut Key Binding Logic ---
         if (!JE.pluginConfig.DisableAllShortcuts) {
@@ -697,22 +725,23 @@
                     e.stopPropagation();
 
                     const labelWrapper = keyElement.nextElementSibling;
+                    const action = keyElement.dataset.action;
 
                     if (e.key === 'Backspace') {
-                        const action = keyElement.dataset.action;
-
-                        // Load, modify, and save the user's custom shortcuts
-                        const userShortcuts = JE.userShortcutManager.load();
-                        delete userShortcuts[action];
-                        JE.userShortcutManager.save(userShortcuts);
-
-                        // Find the original server default key from the plugin's configuration
-                        const defaultConfig = JE.pluginConfig.Shortcuts.find(s => s.Name === action);
+                        const defaultConfig = pluginShortcuts.find(s => s.Name === action);
                         const defaultKey = defaultConfig ? defaultConfig.Key : '';
+
+                        const shortcutIndex = JE.userConfig.shortcuts.Shortcuts.findIndex(s => s.Name === action);
+                        if (shortcutIndex > -1) {
+                            JE.userConfig.shortcuts.Shortcuts.splice(shortcutIndex, 1);
+                        }
+
+                        JE.saveUserSettings('shortcuts.json', JE.userConfig.shortcuts);
 
                         // Update the active shortcuts in memory and what's shown on screen
                         JE.state.activeShortcuts[action] = defaultKey;
                         keyElement.textContent = defaultKey;
+
                         const indicator = labelWrapper.querySelector('.modified-indicator');
                         if (indicator) {
                             indicator.remove();
@@ -726,7 +755,6 @@
                     }
 
                     const combo = (e.metaKey ? 'Meta+' : '') + (e.ctrlKey ? 'Ctrl+' : '') + (e.altKey ? 'Alt+' : '') + (e.shiftKey ? 'Shift+' : '') + (e.key.match(/^[a-zA-Z]$/) ? e.key.toUpperCase() : e.key);
-                    const action = keyElement.dataset.action;
                     const existingAction = Object.keys(JE.state.activeShortcuts).find(name => JE.state.activeShortcuts[name] === combo);
                     if (existingAction && existingAction !== action) {
                         keyElement.style.background = 'rgb(255 0 0 / 60%)';
@@ -740,10 +768,16 @@
                             // Reject the new keybinding and stop the function
                         return;
                     }
-                    // Save the new shortcut
-                    const userShortcuts = JE.userShortcutManager.load();
-                    userShortcuts[action] = combo;
-                    JE.userShortcutManager.save(userShortcuts);
+
+                    // Update or add the shortcut override
+                    let userShortcut = JE.userConfig.shortcuts.Shortcuts.find(s => s.Name === action);
+                    if (userShortcut) {
+                        userShortcut.Key = combo;
+                    } else {
+                        const defaultConfig = pluginShortcuts.find(s => s.Name === action);
+                        JE.userConfig.shortcuts.Shortcuts.push({ ...defaultConfig, Key: combo });
+                    }
+                    JE.saveUserSettings('shortcuts.json', JE.userConfig.shortcuts);
 
                     // Update active shortcuts
                     JE.state.activeShortcuts[action] = combo;
@@ -800,7 +834,7 @@
                         }
                     });
                     JE.currentSettings.lastOpenedTab = tab;
-                    JE.saveSettings(JE.currentSettings);
+                    JE.saveUserSettings('settings.json', JE.currentSettings);
                     resetAutoCloseTimer();
                 });
             });
@@ -846,24 +880,80 @@
             document.removeEventListener('keydown', JE.keyListener);
         }
 
-        document.getElementById('autoPauseToggle').addEventListener('change', (e) => { JE.currentSettings.autoPauseEnabled = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_auto_pause', e.target.checked)); resetAutoCloseTimer(); });
-        document.getElementById('autoResumeToggle').addEventListener('change', (e) => { JE.currentSettings.autoResumeEnabled = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_auto_resume', e.target.checked)); resetAutoCloseTimer(); });
-        document.getElementById('autoPipToggle').addEventListener('change', (e) => { JE.currentSettings.autoPipEnabled = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_auto_pip', e.target.checked)); resetAutoCloseTimer(); });
-        document.getElementById('autoSkipIntroToggle').addEventListener('change', (e) => { JE.currentSettings.autoSkipIntro = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_auto_skip_intro', e.target.checked)); resetAutoCloseTimer(); });
-        document.getElementById('autoSkipOutroToggle').addEventListener('change', (e) => { JE.currentSettings.autoSkipOutro = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_auto_skip_outro', e.target.checked)); resetAutoCloseTimer(); });
-        document.getElementById('randomButtonToggle').addEventListener('change', (e) => { JE.currentSettings.randomButtonEnabled = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_random_button', e.target.checked)); JE.addRandomButton(); resetAutoCloseTimer(); });
-        document.getElementById('randomUnwatchedOnly').addEventListener('change', (e) => { JE.currentSettings.randomUnwatchedOnly = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_unwatched_only', e.target.checked)); resetAutoCloseTimer(); });
-        document.getElementById('randomIncludeMovies').addEventListener('change', (e) => { if (!e.target.checked && !document.getElementById('randomIncludeShows').checked) { e.target.checked = true; JE.toast(JE.t('toast_at_least_one_item_type')); return; } JE.currentSettings.randomIncludeMovies = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(JE.t('toast_random_selection_status', { item_type: 'Movies', status: e.target.checked ? JE.t('selection_included') : JE.t('selection_excluded') })); resetAutoCloseTimer(); });
-        document.getElementById('randomIncludeShows').addEventListener('change', (e) => { if (!e.target.checked && !document.getElementById('randomIncludeMovies').checked) { e.target.checked = true; JE.toast(JE.t('toast_at_least_one_item_type')); return; } JE.currentSettings.randomIncludeShows = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(JE.t('toast_random_selection_status', { item_type: 'Shows', status: e.target.checked ? JE.t('selection_included') : JE.t('selection_excluded') })); resetAutoCloseTimer(); });
+        const addSettingToggleListener = (id, settingKey, featureKey, requiresRefresh = false) => {
+            document.getElementById(id).addEventListener('change', (e) => {
+                JE.currentSettings[settingKey] = e.target.checked;
+                JE.saveUserSettings('settings.json', JE.currentSettings);
+                let toastMessage = createToast(featureKey, e.target.checked);
+                if (requiresRefresh) {
+                    toastMessage += ".<br> Refresh page to apply.";
+                }
+                JE.toast(toastMessage);
+                if (id === 'randomButtonToggle') JE.addRandomButton();
+                if (id === 'showFileSizesToggle' && !e.target.checked) document.querySelectorAll('.mediaInfoItem-fileSize').forEach(el => el.remove());
+                if (id === 'showAudioLanguagesToggle' && !e.target.checked) document.querySelectorAll('.mediaInfoItem-audioLanguage').forEach(el => el.remove());
+                if (id === 'genreTagsToggle' && !e.target.checked) document.querySelectorAll('.genre-overlay-container').forEach(el => el.remove());
+                if (id === 'languageTagsToggle' && !e.target.checked) document.querySelectorAll('.language-overlay-container').forEach(el => el.remove());
+                resetAutoCloseTimer();
+            });
+        };
+
+        addSettingToggleListener('autoPauseToggle', 'autoPauseEnabled', 'feature_auto_pause');
+        addSettingToggleListener('autoResumeToggle', 'autoResumeEnabled', 'feature_auto_resume');
+        addSettingToggleListener('autoPipToggle', 'autoPipEnabled', 'feature_auto_pip');
+        addSettingToggleListener('autoSkipIntroToggle', 'autoSkipIntro', 'feature_auto_skip_intro');
+        addSettingToggleListener('autoSkipOutroToggle', 'autoSkipOutro', 'feature_auto_skip_outro');
+        addSettingToggleListener('randomButtonToggle', 'randomButtonEnabled', 'feature_random_button');
+        addSettingToggleListener('randomUnwatchedOnly', 'randomUnwatchedOnly', 'feature_unwatched_only');
+        addSettingToggleListener('showFileSizesToggle', 'showFileSizes', 'feature_file_size_display');
+        addSettingToggleListener('showAudioLanguagesToggle', 'showAudioLanguages', 'feature_audio_language_display');
+        addSettingToggleListener('removeContinueWatchingToggle', 'removeContinueWatchingEnabled', 'feature_remove_continue_watching');
+        addSettingToggleListener('qualityTagsToggle', 'qualityTagsEnabled', 'feature_quality_tags', true);
+        addSettingToggleListener('genreTagsToggle', 'genreTagsEnabled', 'feature_genre_tags', true);
+        addSettingToggleListener('pauseScreenToggle', 'pauseScreenEnabled', 'feature_custom_pause_screen', true);
+        addSettingToggleListener('languageTagsToggle', 'languageTagsEnabled', 'feature_language_tags', true);
+        addSettingToggleListener('disableCustomSubtitleStyles', 'disableCustomSubtitleStyles', 'feature_disable_custom_subtitle_styles', true);
+        addSettingToggleListener('longPress2xEnabled', 'longPress2xEnabled', 'feature_long_press_2x_speed');
+
+        document.getElementById('randomIncludeMovies').addEventListener('change', (e) => { if (!e.target.checked && !document.getElementById('randomIncludeShows').checked) { e.target.checked = true; JE.toast(JE.t('toast_at_least_one_item_type')); return; } JE.currentSettings.randomIncludeMovies = e.target.checked; JE.saveUserSettings('settings.json', JE.currentSettings); JE.toast(JE.t('toast_random_selection_status', { item_type: 'Movies', status: e.target.checked ? JE.t('selection_included') : JE.t('selection_excluded') })); resetAutoCloseTimer(); });
+        document.getElementById('randomIncludeShows').addEventListener('change', (e) => { if (!e.target.checked && !document.getElementById('randomIncludeMovies').checked) { e.target.checked = true; JE.toast(JE.t('toast_at_least_one_item_type')); return; } JE.currentSettings.randomIncludeShows = e.target.checked; JE.saveUserSettings('settings.json', JE.currentSettings); JE.toast(JE.t('toast_random_selection_status', { item_type: 'Shows', status: e.target.checked ? JE.t('selection_included') : JE.t('selection_excluded') })); resetAutoCloseTimer(); });
+
         document.getElementById('releaseNotesBtn').addEventListener('click', async () => { await showReleaseNotesNotification(); resetAutoCloseTimer(); });
-        document.getElementById('showFileSizesToggle').addEventListener('change', (e) => { JE.currentSettings.showFileSizes = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_file_size_display', e.target.checked)); if (!e.target.checked) { document.querySelectorAll('.mediaInfoItem-fileSize').forEach(el => el.remove()); } resetAutoCloseTimer(); });
-        document.getElementById('showAudioLanguagesToggle').addEventListener('change', (e) => { JE.currentSettings.showAudioLanguages = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_audio_language_display', e.target.checked)); if (!e.target.checked) { document.querySelectorAll('.mediaInfoItem-audioLanguage').forEach(el => el.remove()); } resetAutoCloseTimer(); });
-        document.getElementById('removeContinueWatchingToggle').addEventListener('change', (e) => { JE.currentSettings.removeContinueWatchingEnabled = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_remove_continue_watching', e.target.checked)); resetAutoCloseTimer(); });
-        document.getElementById('qualityTagsToggle').addEventListener('change', (e) => { JE.currentSettings.qualityTagsEnabled = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(`${createToast('feature_quality_tags', e.target.checked)}.<br> Refresh page to apply.`); resetAutoCloseTimer(); });
-        document.getElementById('genreTagsToggle').addEventListener('change', (e) => { JE.currentSettings.genreTagsEnabled = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(`${createToast('feature_genre_tags', e.target.checked)}.<br> Refresh page to apply.`); if (!e.target.checked) { document.querySelectorAll('.genre-overlay-container').forEach(el => el.remove()); } resetAutoCloseTimer(); });
-        document.getElementById('pauseScreenToggle').addEventListener('change', (e) => { JE.currentSettings.pauseScreenEnabled = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(`${createToast('feature_custom_pause_screen', e.target.checked)}.<br> Refresh page to apply.`); resetAutoCloseTimer(); });
-        document.getElementById('disableCustomSubtitleStyles').addEventListener('change', (e) => { JE.currentSettings.disableCustomSubtitleStyles = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_disable_custom_subtitle_styles', e.target.checked)); JE.applySavedStylesWhenReady(); resetAutoCloseTimer(); });
-        document.getElementById('longPress2xEnabled').addEventListener('change', (e) => { JE.currentSettings.longPress2xEnabled = e.target.checked; JE.saveSettings(JE.currentSettings); JE.toast(createToast('feature_long_press_2x_speed', e.target.checked)); resetAutoCloseTimer(); });
+
+        // --- Position Selectors ---
+        const positionSelectors = help.querySelectorAll('.position-selector');
+        positionSelectors.forEach(selector => {
+            const settingKey = selector.dataset.setting;
+            const cells = selector.querySelectorAll('[data-pos]');
+
+            // Highlight current position
+            const updateHighlight = () => {
+                const currentPos = JE.currentSettings[settingKey] || 'top-left';
+                cells.forEach(cell => {
+                    if (cell.dataset.pos === currentPos) {
+                        cell.style.background = primaryAccentColor;
+                    } else {
+                        cell.style.background = 'rgba(255,255,255,0.1)';
+                    }
+                });
+            };
+            updateHighlight();
+
+            // Click handler
+            selector.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const cell = e.target.closest('[data-pos]');
+                if (!cell) return;
+
+                const newPos = cell.dataset.pos;
+                JE.currentSettings[settingKey] = newPos;
+                JE.saveUserSettings('settings.json', JE.currentSettings);
+                updateHighlight();
+                JE.toast(`Refresh to apply.`);
+                resetAutoCloseTimer();
+            });
+        });
 
         const setupPresetHandlers = (containerId, presets, type) => {
             const container = document.getElementById(containerId);
@@ -903,7 +993,7 @@
                         JE.toast(JE.t('toast_subtitle_font', { font: selectedPreset.name }));
                     }
 
-                    JE.saveSettings(JE.currentSettings);
+                    JE.saveUserSettings('settings.json', JE.currentSettings);
                     container.querySelectorAll('.preset-box').forEach(box => {
                         box.style.border = '2px solid transparent';
                     });

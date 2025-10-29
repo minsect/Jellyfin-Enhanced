@@ -103,6 +103,47 @@
                                     <div class="checkboxContainer" style="margin-bottom: 0.5em;"><label><input id="removeContinueWatchingEnabled" is="emby-checkbox" type="checkbox"/><span>Enable "Remove from Continue Watching"</span></label></div>
                                     <div class="checkboxContainer" style="margin-bottom: 0.5em;"><label style="line-height: 1.2em; align-self: flex-start;"><input id="qualityTagsEnabled" is="emby-checkbox" type="checkbox"/><span>Enable Quality Tags<div>This feature is a slightly modified version of the original script by <a class="sectionTitle" target="_blank" href="https://github.com/BobHasNoSoul/Jellyfin-Qualitytags/">BobHasNoSoul</a></div></span></label></div>
                                     <div class="checkboxContainer" style="margin-bottom: 0.5em;"><label><input id="genreTagsEnabled" is="emby-checkbox" type="checkbox"/><span>Enable Genre Tags</span></label></div>
+                                    <div class="checkboxContainer" style="margin-bottom: 0.5em;"><label><input id="languageTagsEnabled" is="emby-checkbox" type="checkbox"/><span>Enable Language Tags</span></label></div>
+                                    <fieldset style="margin-top: 1em;padding: 2em;border-radius: 20px;border-color: #ffffff25;">
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="qualityTagsPosition">Quality Tags Position</label>
+                                        <select is="emby-select" id="qualityTagsPosition" name="qualityTagsPosition" class="emby-select">
+                                            <option value="top-left">Top Left</option>
+                                            <option value="top-right">Top Right</option>
+                                            <option value="bottom-left">Bottom Left</option>
+                                            <option value="bottom-right">Bottom Right</option>
+                                        </select>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="genreTagsPosition">Genre Tags Position</label>
+                                        <select is="emby-select" id="genreTagsPosition" name="genreTagsPosition" class="emby-select">
+                                            <option value="top-left">Top Left</option>
+                                            <option value="top-right">Top Right</option>
+                                            <option value="bottom-left">Bottom Left</option>
+                                            <option value="bottom-right">Bottom Right</option>
+                                        </select>
+                                    </div>
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="languageTagsPosition">Language Tags Position</label>
+                                        <select is="emby-select" id="languageTagsPosition" name="languageTagsPosition" class="emby-select">
+                                            <option value="top-left">Top Left</option>
+                                            <option value="top-right">Top Right</option>
+                                            <option value="bottom-left">Bottom Left</option>
+                                            <option value="bottom-right">Bottom Right</option>
+                                        </select>
+                                    </div>
+                                    <div class="inputContainer" style="margin-top: 1em;">
+                                        <label class="inputLabel inputLabelUnfocused" for="tagsCacheTtlDays">Tags Cache Duration (days)</label>
+                                        <input id="tagsCacheTtlDays" is="emby-input" type="number" min="1" max="365" value="30"/>
+                                        <div class="fieldDescription">How long to cache the above tags data (1-365 days, default: 30)</div>
+                                    </div>
+                                    <div style="margin-top: 1em;">
+                                        <button id="clearTagsCacheBtn" class="raised button-submit emby-button" is="emby-button" type="button">
+                                            <span>Clear All Client Caches</span>
+                                        </button>
+                                        <div class="fieldDescription">Forces all clients to clear Language, Quality and Genre tag caches on next load</div>
+                                    </div>
+                                </fieldset>
                                 </div>
                             </details>
                             <div style="padding-top: 1em;">
@@ -158,8 +199,8 @@
                         </div>
                     </fieldset>
                     <div class="verticalSection">
-                        <button id="clearLocalStorageBtn" class="raised button-cancel block emby-button" is="emby-button" type="button">
-                            <span>Reset Settings for all users</span>
+                        <button id="resetAllUserSettingsBtn" class="raised button-cancel block emby-button" is="emby-button" type="button">
+                            <span>Reset All User Settings to Defaults</span>
                         </button>
                     </div>
                 </div>
@@ -202,9 +243,14 @@
                                 <div class="fieldDescription">A list of providers to ignore from the default region (supports regex).<a class="sectionTitle" target="_blank" href="https://raw.githubusercontent.com/n00bcodr/Jellyfin-Elsewhere/refs/heads/main/resources/providers.txt">Full List</a></div>
                             </div>
                             <h3>Extras</h3>
-                            <div class="checkboxContainer" style="margin-bottom: 0.5em;">
+                            <div class="checkboxContainer">
                                 <label style="line-height: 1.2em; align-self: flex-start;"><input id="showReviews" is="emby-checkbox" type="checkbox"/>
                                     <span>Show Reviews from TMDB in Item Details Page<div style="font-size: .9em;">Requires TMDB API Key to be set</div></span>
+                                </label>
+                            </div>
+                            <div class="checkboxContainer">
+                                <label style="line-height: 1.2em; align-self: flex-start;"><input id="reviewsExpandedByDefault" is="emby-checkbox" type="checkbox"/>
+                                    <span>Expand reviews by default<div style="font-size: .9em;">When enabled, the reviews section opens expanded by default for all users (unless they override in their session).</div></span>
                                 </label>
                             </div>
                         </div>
@@ -221,6 +267,13 @@
                                 </label>
                             </div>
                             <div class="fieldDescription" style="margin-bottom: 2em;">Enhance Jellyfin search by showing results from Jellyseerr.<br>This allows users to discover and request missing movies and shows directly from Jellyfin.</div>
+                            <div class="checkboxContainer" style="margin-bottom: 0.5em !important;">
+                                <label>
+                                    <input id="jellyseerrUseJellyseerrLinks" is="emby-checkbox" type="checkbox"/>
+                                    <span>Link result titles to Jellyseerr instead of TMDB</span>
+                                </label>
+                            </div>
+                            <div class="fieldDescription" style="margin-bottom: 2em;">When enabled, clicking a Jellyseerr result title will open your Jellyseerr item page using the first configured Jellyseerr URL.</div>
                             <div class="checkboxContainer" style="margin-bottom: 0.5em !important;">
                                 <label>
                                     <input id="jellyseerrShowAdvanced" is="emby-checkbox" type="checkbox"/>
@@ -256,7 +309,7 @@
                                 <i class="material-icons" style="color: #00a4dc; font-size: 18px;">info</i>
                                 <div>
                                     "<b>Enable Jellyfin Sign-In</b>" must be enabled in Jellyseerr User Settings (/settings/users)<br><br>
-                                    All users much be imported to Jellyseer as Jellyfin users for them to be able to request conetnt.
+                                    All users much be imported to Jellyseer as Jellyfin users for them to be able to request content.
                                 </div>
                             </div>
                         </div>
@@ -461,7 +514,8 @@
             const pluginId = 'f69e946a-4b3c-4e9a-8f0a-8d7c1b2c4d9b';
             const page = document.querySelector('#JellyfinEnhancedPage');
             const form = document.querySelector('#JellyfinEnhancedForm');
-            const clearLocalStorageBtn = document.querySelector('#clearLocalStorageBtn');
+            const resetAllUserSettingsBtn = document.querySelector('#resetAllUserSettingsBtn');
+            const clearTagsCacheBtn = document.querySelector('#clearTagsCacheBtn');
 
             const shortcutListContainer = document.getElementById('shortcut-list-container');
             const addShortcutSelect = document.getElementById('add-shortcut-select');
@@ -856,9 +910,24 @@
                 document.querySelector('#removeContinueWatchingEnabled').checked = config.RemoveContinueWatchingEnabled;
                 document.querySelector('#qualityTagsEnabled').checked = config.QualityTagsEnabled;
                 document.querySelector('#genreTagsEnabled').checked = config.GenreTagsEnabled;
+                const qPos = (config.QualityTagsPosition || 'top-left');
+                const gPos = (config.GenreTagsPosition || 'top-right');
+                const lPos = (config.LanguageTagsPosition || 'bottom-left');
+                const langEnabled = !!config.LanguageTagsEnabled;
+                const qSel = document.querySelector('#qualityTagsPosition');
+                const gSel = document.querySelector('#genreTagsPosition');
+                const lSel = document.querySelector('#languageTagsPosition');
+                const lChk = document.querySelector('#languageTagsEnabled');
+                if (qSel) qSel.value = qPos;
+                if (gSel) gSel.value = gPos;
+                if (lSel) lSel.value = lPos;
+                if (lChk) lChk.checked = langEnabled;
+                document.querySelector('#tagsCacheTtlDays').value = config.TagsCacheTtlDays || 30;
                 document.querySelector('#pauseScreenEnabled').checked = config.PauseScreenEnabled;
                 document.querySelector('#showReviews').checked = config.ShowReviews;
+                document.querySelector('#reviewsExpandedByDefault').checked = config.ReviewsExpandedByDefault;
                 document.querySelector('#jellyseerrEnabled').checked = config.JellyseerrEnabled;
+                document.querySelector('#jellyseerrUseJellyseerrLinks').checked = config.JellyseerrUseJellyseerrLinks;
                 document.querySelector('#jellyseerrShowAdvanced').checked = config.JellyseerrShowAdvanced;
                 document.querySelector('#showElsewhereOnJellyseerr').checked = config.ShowElsewhereOnJellyseerr;
                 document.querySelector('#jellyseerrUrls').value = config.JellyseerrUrls;
@@ -926,9 +995,16 @@
             config.RemoveContinueWatchingEnabled = document.querySelector('#removeContinueWatchingEnabled').checked;
             config.QualityTagsEnabled = document.querySelector('#qualityTagsEnabled').checked;
             config.GenreTagsEnabled = document.querySelector('#genreTagsEnabled').checked;
+            config.LanguageTagsEnabled = document.querySelector('#languageTagsEnabled').checked;
+            config.QualityTagsPosition = document.querySelector('#qualityTagsPosition').value;
+            config.GenreTagsPosition = document.querySelector('#genreTagsPosition').value;
+            config.LanguageTagsPosition = document.querySelector('#languageTagsPosition').value;
+            config.TagsCacheTtlDays = parseInt(document.querySelector('#tagsCacheTtlDays').value, 10) || 30;
             config.PauseScreenEnabled = document.querySelector('#pauseScreenEnabled').checked;
             config.ShowReviews = document.querySelector('#showReviews').checked;
+            config.ReviewsExpandedByDefault = document.querySelector('#reviewsExpandedByDefault').checked;
             config.JellyseerrEnabled = document.querySelector('#jellyseerrEnabled').checked;
+            config.JellyseerrUseJellyseerrLinks = document.querySelector('#jellyseerrUseJellyseerrLinks').checked;
             config.JellyseerrShowAdvanced = document.querySelector('#jellyseerrShowAdvanced').checked;
             config.ShowElsewhereOnJellyseerr = document.querySelector('#showElsewhereOnJellyseerr').checked;
             config.JellyseerrUrls = (document.querySelector('#jellyseerrUrls').value || '').split('\n').map(u => u.trim()).filter(Boolean).join('\n');
@@ -964,13 +1040,26 @@
             return false;
         }
 
-        function clearLocalStorage() {
-            if (confirm("Are you sure?\n\nThis will reset Jellyfin Enhanced settings for all users to defaults on next load.")) {
+        // Resets server-side settings.json for all users to plugin defaults
+        function resetAllUserSettings() {
+            if (confirm("Are you sure?\n\nThis will reset Jellyfin Enhanced settings (settings.json) for ALL users to the above defaults.")) {
                 Dashboard.showLoadingMsg();
-                ApiClient.getPluginConfiguration(pluginId).then((config) => {
-                    config.ClearLocalStorageTimestamp = Date.now();
-                    ApiClient.updatePluginConfiguration(pluginId, config).then((result) => {
-                        Dashboard.processPluginConfigurationUpdateResult(result);
+                ApiClient.ajax({
+                    type: 'POST',
+                    url: ApiClient.getUrl('/JellyfinEnhanced/reset-all-users-settings'),
+                    dataType: 'json'
+                }).then(() => {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert({
+                        title: 'Success',
+                        message: 'All users\' settings have been reset to defaults. Settings will take effect after a refresh.'
+                    });
+                }).catch((e) => {
+                    Dashboard.hideLoadingMsg();
+                    console.error('Failed to reset settings for all users:', e);
+                    Dashboard.alert({
+                        title: 'Error',
+                        message: 'Failed to reset settings for all users. Check server logs for details.'
                     });
                 });
             }
@@ -978,7 +1067,29 @@
 
         page.addEventListener('pageshow', loadConfig);
         form.addEventListener('submit', saveConfig);
-        clearLocalStorageBtn.addEventListener('click', clearLocalStorage);
+        resetAllUserSettingsBtn.addEventListener('click', resetAllUserSettings);
+        clearTagsCacheBtn.addEventListener('click', async () => {
+            if (confirm("Clear all client caches?\n\nThis will force all clients to clear their quality and genre tag caches on next page load.")) {
+                Dashboard.showLoadingMsg();
+                try {
+                    const config = await ApiClient.getPluginConfiguration(pluginId);
+                    config.ClearLocalStorageTimestamp = Date.now();
+                    await ApiClient.updatePluginConfiguration(pluginId, config);
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert({
+                        title: 'Success',
+                        message: 'Cache clear signal sent. All clients will clear their caches on next page load.'
+                    });
+                } catch (e) {
+                    Dashboard.hideLoadingMsg();
+                    console.error('Failed to set cache clear timestamp:', e);
+                    Dashboard.alert({
+                        title: 'Error',
+                        message: 'Failed to set cache clear timestamp. Check server logs for details.'
+                    });
+                }
+            }
+        });
         testJellyseerrBtn.addEventListener('click', testJellyseerrConnection);
         testSpotifyIntegrationButton.addEventListener('click', testSpotifyIntegrationConnection);
         testTmdbBtn.addEventListener('click', testTmdbConnection);

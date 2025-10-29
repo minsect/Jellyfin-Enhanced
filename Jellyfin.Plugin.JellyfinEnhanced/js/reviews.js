@@ -3,7 +3,7 @@
     'use strict';
 
     JE.initializeReviewsScript = function () {
-        if (!JE.pluginConfig.ShowReviews || !JE.pluginConfig.TMDB_API_KEY) {
+        if (!JE.pluginConfig.ShowReviews || !JE.pluginConfig.TmdbEnabled) {
             console.log('🪼 Jellyfin Enhanced: Reviews feature disabled or TMDB API key not set.');
             return;
         }
@@ -80,6 +80,10 @@
             if (hasReviews) {
                 reviewsSection = document.createElement('details');
                 reviewsSection.className = 'detailSection tmdb-reviews-section';
+                // Respect user preference for expanded/collapsed section by default
+                if (JE.currentSettings?.reviewsExpandedByDefault) {
+                    reviewsSection.setAttribute('open', '');
+                }
                 const summary = document.createElement('summary');
                 summary.className = 'sectionTitle';
                 summary.innerHTML = `${JE.t('reviews_title', { count: reviews.length })} <i class="material-icons expand-icon">expand_more</i>`;
@@ -105,6 +109,20 @@
                             const previewContent = review.content.substring(0, 350);
                             textElement.innerHTML = escapeHtml(previewContent).replace(/\n/g, '<br>') + `... <span class="tmdb-review-toggle">${JE.t('reviews_read_more')}</span>`;
                         }
+                    }
+                });
+                // Persist user's expand/collapse choice for future pages
+                reviewsSection.addEventListener('toggle', function () {
+                    try {
+                        if (!window.JellyfinEnhanced) return;
+                        const JE = window.JellyfinEnhanced;
+                        JE.currentSettings = JE.currentSettings || JE.loadSettings?.() || {};
+                        JE.currentSettings.reviewsExpandedByDefault = reviewsSection.open;
+                        if (typeof JE.saveUserSettings === 'function') {
+                            JE.saveUserSettings('settings.json', JE.currentSettings);
+                        }
+                    } catch (err) {
+                        console.error(`${logPrefix} Failed to persist reviews expanded state`, err);
                     }
                 });
             } else {
@@ -198,22 +216,17 @@
             }
         }
 
-        function startLoop() {
-            setInterval(() => {
-                const visiblePage = document.querySelector('#itemDetailPage:not(.hide)');
-                if (visiblePage) {
-                    processPage(visiblePage);
-                }
-            }, 1000);
+        function processPages() {
+            const visiblePage = document.querySelector('#itemDetailPage:not(.hide)');
+            if (visiblePage) {
+                processPage(visiblePage);
+            }
         }
 
         injectCss();
-        let mainInterval = setInterval(() => {
-            if (typeof ApiClient !== 'undefined' && ApiClient.getCurrentUserId()) {
-                clearInterval(mainInterval);
-                startLoop();
-            }
-        }, 500);
+
+        setTimeout(processPages, 1000); // Initial load after 1 second
+        setInterval(processPages, 2000); // Then check every 2 seconds
     };
 })(window.JellyfinEnhanced);
 

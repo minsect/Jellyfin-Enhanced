@@ -1,3 +1,4 @@
+using Jellyfin.Plugin.JellyfinEnhanced.Configuration;
 using Jellyfin.Plugin.JellyfinEnhanced.Services;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced
             serviceCollection.AddHttpClient();
             serviceCollection.AddSingleton<Logger>();
             serviceCollection.AddSingleton<SLSKDStore>();
+            serviceCollection.AddSingleton<UserConfigurationManager>();
         }
     }
 }

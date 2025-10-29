@@ -6,7 +6,7 @@
 
     /**
      * Initializes the Jellyfin Elsewhere script.
-     * It will only run if a TMDB API key is configured.
+     * It will only run if the server reports TMDB is configured.
      */
     JE.initializeElsewhereScript = function() {
         if (!JE.pluginConfig.ElsewhereEnabled) {
@@ -14,13 +14,13 @@
             return;
         }
         // --- Configuration ---
-        const TMDB_API_KEY = JE.pluginConfig.TMDB_API_KEY || '';
+        const TmdbEnabled = !!JE.pluginConfig.TmdbEnabled;
         const DEFAULT_REGION = JE.pluginConfig.DEFAULT_REGION || 'US';
         const DEFAULT_PROVIDERS = JE.pluginConfig.DEFAULT_PROVIDERS ? JE.pluginConfig.DEFAULT_PROVIDERS.replace(/'/g, '').replace(/\n/g, ',').split(',').map(s => s.trim()).filter(s => s) : [];
         const IGNORE_PROVIDERS = JE.pluginConfig.IGNORE_PROVIDERS ? JE.pluginConfig.IGNORE_PROVIDERS.replace(/'/g, '').replace(/\n/g, ',').split(',').map(s => s.trim()).filter(s => s) : [];
 
-        if (!TMDB_API_KEY) {
-            console.log('🪼 Jellyfin Enhanced: 🎬 Jellyfin Elsewhere: No TMDB API key configured, skipping initialization');
+        if (!TmdbEnabled) {
+            console.log('🪼 Jellyfin Enhanced: 🎬 Jellyfin Elsewhere: TMDB is not configured, skipping initialization');
             return;
         }
 
@@ -390,11 +390,13 @@
                 userServices = selectedServices;
 
                 modal.style.display = 'none';
-                localStorage.setItem('streaming-settings', JSON.stringify({
-                    region: userRegion,
-                    regions: userRegions,
-                    services: userServices
-                }));
+
+                const elsewhereSettings = {
+                    Region: userRegion,
+                    Regions: userRegions,
+                    Services: userServices
+                };
+                JE.saveUserSettings('elsewhere.json', elsewhereSettings);
             };
 
             // Close on backdrop click
@@ -407,17 +409,10 @@
 
         // Load saved settings
         function loadSettings() {
-            const saved = localStorage.getItem('streaming-settings');
-            if (saved) {
-                try {
-                    const settings = JSON.parse(saved);
-                    userRegion = settings.region || DEFAULT_REGION;
-                    userRegions = settings.regions || [];
-                    userServices = settings.services || [];
-                } catch (e) {
-                    console.log('🪼 Jellyfin Enhanced: 🎬 Jellyfin Elsewhere: Error loading settings:', e);
-                }
-            }
+            const settings = JE.userConfig.elsewhere;
+            userRegion = settings.Region || DEFAULT_REGION;
+            userRegions = settings.Regions || [];
+            userServices = settings.Services || [];
         }
 
         function createServiceBadge(service, tmdbId, mediaType) {
@@ -564,6 +559,7 @@
                 cursor: pointer;
                 color: #fff;
                 flex: 1;
+                text-align: left;
             `;
 
             // Add JustWatch link if available
@@ -920,6 +916,7 @@
                 cursor: pointer;
                 color: #fff;
                 flex: 1;
+                text-align: left;
             `;
 
             // Add JustWatch link if available and enabled

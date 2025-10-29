@@ -32,6 +32,7 @@ The essential enhancement suite for Jellyfin, bundling advanced features and cus
     - [Pause Screen CSS](#pause-screen-css)
     - [Quality Tags CSS](#quality-tags-css)
     - [Genre Tags CSS](#genre-tags-css)
+    - [Language Tags CSS](#language-tags-css)
     - [Enhanced Panel CSS](#panel-css)
   - [🫚 Project Structure](#-project-structure)
     - [File Structure](#file-structure)
@@ -40,6 +41,7 @@ The essential enhancement suite for Jellyfin, bundling advanced features and cus
   - [💡 FAQ \& Troubleshooting](#-faq--troubleshooting)
     - [FAQ](#faq)
     - [Troubleshooting](#troubleshooting)
+    - [Common Errors](#common-errors)
   - [📸 Screenshots](#-screenshots)
   - [📄 License](#-license)
 - [Enjoying Jellyfin Enhanced?](#enjoying-jellyfin-enhanced)
@@ -49,7 +51,18 @@ The essential enhancement suite for Jellyfin, bundling advanced features and cus
 
 1.  In Jellyfin, go to **Dashboard** > **Plugins** > **Catalog** > ⚙️
 2.  Click **➕** and give the repository a name (e.g., "Jellyfin Enhanced").
-3.  Set the **Repository URL** to: `https://raw.githubusercontent.com/n00bcodr/jellyfin-enhanced/main/manifest.json`
+3.  Set the **Repository URL** to:
+
+> [!IMPORTANT]
+> **If you are on Jellyfin version 10.11**
+> ```
+> https://raw.githubusercontent.com/n00bcodr/jellyfin-plugins/main/10.11/manifest.json
+> ```
+> If you are on 10.10.7
+> ```
+> https://raw.githubusercontent.com/n00bcodr/jellyfin-plugins/main/10.10/manifest.json
+> ```
+
 4.  Click **Save**.
 5.  Go to the **Catalog** tab, find **Jellyfin Enhanced** in the list, and click **Install**.
 6.  **Restart** your Jellyfin server to complete the installation.
@@ -120,6 +133,7 @@ This gives the plugin the necessary permissions to inject JavaScript into the we
 - **🎬 Custom Pause Screen:** A beautifully designed, informative overlay when you pause a video. This feature is a modified version of the original script by [BobHasNoSoul](https://github.com/BobHasNoSoul/Jellyfin-PauseScreen).
 - **🏷️ Quality Tags:** See media quality (4K, HDR, Atmos) at a glance directly on the posters. This is a modified and rewritten version of the original script by [BobHasNoSoul](https://github.com/BobHasNoSoul/Jellyfin-Qualitytags/).
 - **🎭 Genre Tags:** Identify genres instantly with themed icons on posters.
+- **🌐 Language Tags:** Displays available audio languages as flags on posters.
 - **🔗 .arr Links Integration:** For administrators, quickly jump to the Sonarr, Radarr, or Bazarr page for any item.
 - **🔖 Watchlist** Watchlist any item and access your watchlist using a [CustomTab](https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs/tree/main/src)
 - **🌍 Multi-language Support:** The interface is available in multiple languages, with more on the way.
@@ -383,40 +397,6 @@ Quality tags are injected into each card/poster with this structure:
   }
   ```
 
-* **Position of Tags**
-
-
-  - Top Right
-    ```css
-    .quality-overlay-container {
-        top: 6px !important;
-        right: 6px !important;
-        left: auto !important;
-        bottom: auto !important;
-        align-items: flex-end !important;
-    }
-    ```
-  - Bottom Left
-    ```css
-    .quality-overlay-container {
-        bottom: 6px !important;
-        left: 6px !important;
-        top: auto !important;
-        right: auto !important;
-        align-items: flex-start !important;
-    }
-    ```
-  - Bottom Right
-    ```css
-    .quality-overlay-container {
-        bottom: 6px !important;
-        right: 6px !important;
-        top: auto !important;
-        left: auto !important;
-        align-items: flex-end !important;
-    }
-    ```
-
 
 * **Hide unwanted tags**
 
@@ -430,10 +410,11 @@ Quality tags are injected into each card/poster with this structure:
   ```
 
 > **Note:**
->* Always use `!important` to ensure your custom styles override the defaults.
->* Only the **best resolution** tag per item is shown (e.g. you won’t see both 4K and 1080p).
->* `LOW-RES` is the fallback for anything below 480p.
->* Tags are sorted automatically with resolution first, then video features, then audio.
+>- Always use `!important` to ensure your custom styles override the defaults.
+>- Only the **best resolution** tag per item is shown (e.g. you won’t see both 4K and 1080p).
+>- `LOW-RES` is the fallback for anything below 480p.
+>- Tags are sorted automatically with resolution first, then video features, then audio.
+>- Position can be controlled via the Enhanced Panel settings under.
 >
 
 </details>
@@ -525,46 +506,86 @@ The HTML structure for the tags is as follows:
 
     ```
 
--  **Position of Tags**
-
-
-     - Top Right
-
-       ```css
-       .genre-overlay-container {
-           top: 6px !important;
-           right: 6px !important;
-           left: auto !important;
-           bottom: auto !important;
-           align-items: flex-end !important;
-       }
-       ```
-     - Bottom Left
-
-       ```css
-       .genre-overlay-container {
-           bottom: 6px !important;
-           left: 6px !important;
-           top: auto !important;
-           right: auto !important;
-           align-items: flex-start !important;
-       }
-       ```
-     - Bottom Right
-
-       ```css
-       .genre-overlay-container {
-           bottom: 6px !important;
-           right: 6px !important;
-           top: auto !important;
-           left: auto !important;
-           align-items: flex-end !important;
-       }
-       ```
 > **Note:**
 > -   Remember to use `!important` in your custom CSS to override the default styles from the plugin.
 > -   The plugin will show a maximum of three genre tags per item.
+> -   Position can be controlled via the Enhanced Panel settings under.
 >
+
+</details>
+
+### <a id="language-tags-css"></a>
+<details>
+<summary style="font-size: 1.2em;">Language Tags</summary>
+<br>
+
+Language tags appear as country flag icons on posters to indicate available audio languages. By default, they are positioned in the bottom-left corner and show up to 3 unique language flags per item.
+
+The HTML structure for language tags is as follows:
+
+```html
+<div class="cardImageContainer">
+    <div class="language-overlay-container">
+        <img src="https://flagcdn.com/w20/gb.png" class="language-flag" alt="English" loading="lazy">
+        <img src="https://flagcdn.com/w20/fr.png" class="language-flag" alt="French" loading="lazy">
+        <img src="https://flagcdn.com/w20/es.png" class="language-flag" alt="Spanish" loading="lazy">
+    </div>
+</div>
+```
+
+**Classes**
+
+- **`.language-overlay-container`**: The main container for all language flag icons on a card.
+- **`.language-flag`**: The individual flag image for each language.
+
+<br>
+
+**Customization Examples**
+--------------------------
+
+| Element | CSS Selector | Example CSS |
+| --- | --- | --- |
+| **All Flag Icons** | `.language-flag` | `.language-flag { width: 20px !important; height: 15px !important; }` |
+| **Container Position** | `.language-overlay-container` | `.language-overlay-container { bottom: 10px !important; left: 10px !important; }` |
+| **Flag Spacing** | `.language-overlay-container` | `.language-overlay-container { gap: 2px !important; }` |
+| **Hide Language Tags** | `.language-overlay-container` | `.language-overlay-container { display: none !important; }` |
+| **Stack Horizontally** | `.language-overlay-container` | `.language-overlay-container { flex-direction: row !important; }` |
+
+<br>
+
+**CSS Examples**
+----------------
+
+- **Change Flag Size**
+  ```css
+  .language-flag {
+      width: 30px !important;
+      height: auto !important;
+      border-radius: 3px !important;
+  }
+  ```
+
+- **Add Border and Shadow to Flags**
+  ```css
+  .language-flag {
+      border: 1px solid rgba(255, 255, 255, 0.3) !important;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+  }
+  ```
+
+- **Stack Flags Horizontally in a Row**
+  ```css
+  .language-overlay-container {
+      flex-direction: row !important;
+      gap: 4px !important;
+  }
+  ```
+
+> **Note:**
+> - Always use `!important` to ensure your custom styles override the defaults.
+> - Language tags use flag icons from [flagcdn.com](https://flagcdn.com) service.
+> - The plugin shows a maximum of 3 unique language flags per item.
+> - Position can be controlled via the Enhanced Panel settings under.
 
 </details>
 
@@ -574,8 +595,18 @@ The HTML structure for the tags is as follows:
 <summary style="font-size: 1.25em; font-weight: 600;">Enhanced Panel</summary>
 <br>
 
-While the script automatically themes itself with Jellyfish, you can apply your own custom look on any theme.
-Sample styling
+The Enhanced Panel automatically adapts its styling to match your current Jellyfin theme. It detects popular themes like Jellyfish and ElegantFin and uses their color schemes for seamless integration.
+
+**Supported Themes:**
+- **Jellyfish**: Uses theme's accent colors and blur effects
+- **ElegantFin**: Matches the theme's header and accent colors
+- **Default**: Clean, universal styling for unrecognized themes
+
+**Automatic Theme Detection:** The panel detects your active theme using unique CSS variables and applies appropriate styling without any configuration needed.
+
+**Custom Styling:** If you want to override the automatic theming or customize the panel appearance further, you can use the CSS selectors below.
+
+Sample custom styling:
 
 ```css
 
@@ -715,8 +746,8 @@ Jellyfin.Plugin.JellyfinEnhanced/
     │   ├── modal.js
     │   └── ui.js
     ├── watchlist/
-    │   ├── cardBuilder.js
     │   └── watchlist.js
+    ├── migrate.js
     ├── reviews.js
     ├── splashscreen.js
     ├── arr-links.js
@@ -724,6 +755,7 @@ Jellyfin.Plugin.JellyfinEnhanced/
     ├── pausescreen.js
     ├── qualitytags.js
     ├── genretags.js
+    ├── languagetags.js
     └── plugin.js
 ```
 
@@ -746,9 +778,10 @@ Jellyfin.Plugin.JellyfinEnhanced/
     * **`ui.js`**: Manages all visual elements of the integration, like result cards, request buttons, and status icons.
     * **`jellyseerr.js`**: The main controller for the integration, orchestrating the other components and managing state.
 
-* **`/watchlist/`**: This directory contains all components for the watchlist functionality.
-    * **`cardBuilder.js`**: A utility to dynamically construct card elements for displaying media items, used by the watchlist.
-    * **`watchlist.js`**: Manages all aspects of the watchlist feature, including adding/removing items and displaying the watchlist itself.
+* **`/watchlist/`**: This directory contains the watchlist functionality.
+    * **`watchlist.js`**: A loader script that dynamically fetches watchlist functionality from [KefinTweaks](https://github.com/ranaldsgift/kefintweaks). It loads the necessary scripts and CSS from the configured version (or master by default), including `utils.js`, `localStorageCache.js`, `modal.js`, `cardBuilder.js`, and the main `watchlist.js` implementation.
+
+* **`migrate.js`**: Handles one-time migration of user settings from browser localStorage to server-side storage. This allows users who upgraded from earlier versions to seamlessly migrate their settings, shortcuts, elsewhere preferences, and bookmarks to the new server-based configuration system.
 
 * **`reviews.js`**: Adds a section for TMDB user reviews on item detail pages.
 
@@ -761,8 +794,10 @@ Jellyfin.Plugin.JellyfinEnhanced/
 * **`pausescreen.js`**: Displays a custom, informative overlay when a video is paused.
 
 * **`qualitytags.js`**: Manages the display of media quality information (like 4K, HDR, and Atmos) as tags directly on the posters.
-*
+
 * **`genretags.js`**: Manages the display of media genre information as tags directly on the posters.
+
+* **`languagetags.js`**: Manages the display of audio language information as flag icons directly on the posters.
 
 
 <br>
@@ -775,7 +810,7 @@ Jellyfin.Plugin.JellyfinEnhanced/
 
 - Official Jellyfin Web UI
 - Official Jellyfin Android and iOS Apps
-- Official Jellyfin Desktop Apps
+- Official Jellyfin Desktop Apps (Not tested, but ideally should work)
 
 
 > [!IMPORTANT]
@@ -828,14 +863,44 @@ The plugin automatically uses the language set in your Jellyfin user profile. If
 
 ### Troubleshooting
 
-Here is a list of common errors you might see in your Jellyfin server logs or your browser's developer console, and what they mean.
 
-**Server Logs (`Jellyfin Server Dashboard > Logs`)**
+Gathering Logs for Troubleshooting Jellyfin Enhanced
+----------------------------------------------------
 
-| Error Message | Meaning & Solution |
+When reporting a bug or issue with the Jellyfin Enhanced plugin, providing logs is crucial for diagnosing the problem. There are three main types of logs that might be needed based on the issue:
+
+1.  **Console Logs (Browser):** These logs capture messages, errors, and warnings generated by the plugins scripts when running or trying to run in your browser.
+    -   **When are they needed:** Best for script not loading at all, issue with a feature, errors when clicking buttons, visual glitches, etc,
+    -   **What to look for:** Filter the console with `"🪼Jellyfin Enhanced"` or for watchlist `"[Watchlist]"` and look for any errors.
+
+2.  **Network Logs (Browser):** These logs record all the network requests made by your browser tab. This includes requests made by Jellyfin Enhanced to the Jellyfin server. These record all the proxy calls to TMDB, Jellyseerr, Watchlist Homescreen section and also settings being updated and read from server storage.
+
+    -   **When needed:** Best for issues related to data not loading, features failing to communicate with the server (like Jellyseerr search/requests, saving settings, Elsewhere lookups), or slow performance potentially caused by network problems.
+    -   **What to look for:** Filter the log with `"JellyfinEnhanced"` or for watchlist `"Watchlist"` and look for any errors in status codes.
+
+
+3.  **Server Logs (`Jellyfin Admin Dashboard > Logs`):** These logs are generated by the Jellyfin server itself and capture backend activity, including plugin operations, API requests, and potential server-side errors.
+
+    -   **When needed:** Best for issues related to plugin installation, server-side configuration problems (like Jellyseerr connection failures reported by the plugin settings page test button), permission errors (like failing to modify `index.html`), or crashes.
+    -  **What to look for:** Look for errors mentioning `"JellyfinEnhanced"` or `"Jellyfin Enhanced"` also look for errors int he log files by Jellyfin Enhanced (e.g. `JellyfinEnhanced_yyyy-mm-dd.log`)
+
+
+> [!Note]
+> If you do not know how to access your Browser's Developer Tools to collect the logs, you should really use the power of internet to figure that out.
+> or follow this [link](https://www.google.com/search?q=How+to+access+my+browser%27s+developer+tools%3F)>
+
+
+### Common Errors
+
+Here is a list of common errors you might see in your Jellyfin server logs or your browser's developer console, and way forward.
+
+
+| Error | Way forward |
 | --- | --- |
 | `Access to the path '/jellyfin/jellyfin-web/index.html ' is denied.` | **Meaning:** The plugin was unable to edit the `index.html` file to inject its script. <br> **Solution:** This is common in Docker installs. Follow the **Docker Installation Notes** in the README to correctly map the `index.html` file or use file-transformation plugin. |
 | ` Access to the path 'C:\Program Files\Jellyfin\Server\jellyfin-web\index.html' is denied.` | **Meaning:** The plugin was unable to edit the `index.html` file to inject its script on windows installation <br> **Solution:** Grant `Read` and `Write` permissions for the Jellyfin folder for "NETWORK SERVICE". Refer [#79](https://github.com/n00bcodr/Jellyfin-Enhanced/issues/79)|
+| Plugin is installed fine, but the scrips do not load | If it is not the above two, and if you are on Jellyfin Version **10.11** <br> There seems to be an issue with how startup tasks are migrated from 10.10.7 to 10.11, Please check for `Jellyfin Enhanced Startup` task in your Scheduled Tasks in your Admin Dashboard and see if it is run. If not run it. <br><br> Also check if you have "Task Trigger" to run **On application startup** if you do not, please add a new trigger with that trigger type.|
+|Reviews, Elsewhere, Elsewhere Icons on Jellyseerr are not working | TMDB API might not be accessible in your region. <br>Checkout the official Jellyseerr Troubleshooting guide [here](https://docs.seerr.dev/troubleshooting#tmdb-failed-to-retrievefetch-xxx). |
 <br>
 <p align="center">
 --------------------------------------------------

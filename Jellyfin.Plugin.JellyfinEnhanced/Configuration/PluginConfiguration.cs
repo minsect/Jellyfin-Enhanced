@@ -43,9 +43,15 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
             RemoveContinueWatchingEnabled = false;
             ShowAudioLanguages = true;
             ShowReviews = false;
+            ReviewsExpandedByDefault = false;
             PauseScreenEnabled = true;
             QualityTagsEnabled = false;
             GenreTagsEnabled = false;
+            TagsCacheTtlDays = 30;
+            LanguageTagsEnabled = false;
+            QualityTagsPosition = "top-left";
+            GenreTagsPosition = "top-right";
+            LanguageTagsPosition = "bottom-left";
             WatchlistEnabled = true;
             DisableAllShortcuts = false;
             DefaultSubtitleStyle = 0;
@@ -76,6 +82,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
             JellyseerrEnabled = false;
             JellyseerrShowAdvanced = false;
             ShowElsewhereOnJellyseerr = false;
+            JellyseerrUseJellyseerrLinks = false;
             JellyseerrUrls = "";
             JellyseerrApiKey = "";
 
@@ -129,20 +136,27 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
         public bool RemoveContinueWatchingEnabled { get; set; }
         public bool ShowAudioLanguages { get; set; }
         public bool ShowReviews { get; set; }
+        public bool ReviewsExpandedByDefault { get; set; }
         public List<Shortcut> Shortcuts { get; set; }
         public bool PauseScreenEnabled { get; set; }
         public bool QualityTagsEnabled { get; set; }
+        public bool LanguageTagsEnabled { get; set; }
+        public int TagsCacheTtlDays { get; set; }
         public bool WatchlistEnabled { get; set; }
         public bool DisableAllShortcuts { get; set; }
         public int DefaultSubtitleStyle { get; set; }
         public int DefaultSubtitleSize { get; set; }
         public int DefaultSubtitleFont { get; set; }
         public bool DisableCustomSubtitleStyles { get; set; }
+        public string QualityTagsPosition { get; set; } = "top-left";
+        public string GenreTagsPosition { get; set; } = "top-right";
+        public string LanguageTagsPosition { get; set; } = "bottom-left";
 
         // Jellyseerr Search Settings
         public bool JellyseerrEnabled { get; set; }
         public bool JellyseerrShowAdvanced { get; set; }
         public bool ShowElsewhereOnJellyseerr { get; set; }
+        public bool JellyseerrUseJellyseerrLinks { get; set; }
         public string JellyseerrUrls { get; set; }
         public string JellyseerrApiKey { get; set; }
 

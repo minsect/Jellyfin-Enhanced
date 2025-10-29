@@ -20,6 +20,8 @@ using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json.Linq;
+using Jellyfin.Plugin.JellyfinEnhanced.Configuration;
+using MediaBrowser.Controller;
 
 namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
 {
@@ -44,7 +46,8 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         private readonly IDtoService _dtoService;
         private readonly IMemoryCache _memoryCache;
         private readonly SLSKDStore _SLSKDStore;
-        public JellyfinEnhancedController(IHttpClientFactory httpClientFactory, Logger logger, IUserManager userManager, IUserDataManager userDataManager, ILibraryManager libraryManager, IDtoService dtoService, IMemoryCache memoryCache, SLSKDStore store)
+        private readonly UserConfigurationManager _userConfigurationManager;
+        public JellyfinEnhancedController(IHttpClientFactory httpClientFactory, Logger logger, IUserManager userManager, IUserDataManager userDataManager, ILibraryManager libraryManager, IDtoService dtoService, IMemoryCache memoryCache, SLSKDStore store, UserConfigurationManager userConfigurationManager)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger;
@@ -54,6 +57,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             _dtoService = dtoService;
             _memoryCache = memoryCache;
             _SLSKDStore = store;
+            _userConfigurationManager = userConfigurationManager;
         }
 
         private async Task<string?> GetJellyseerrUserId(string jellyfinUserId)
@@ -81,10 +85,10 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
                     if (response.IsSuccessStatusCode)
                     {
                         var content = await response.Content.ReadAsStringAsync();
-                        var usersResponse = JsonSerializer.Deserialize<JsonElement>(content);
+                        var usersResponse = System.Text.Json.JsonSerializer.Deserialize<JsonElement>(content);
                         if (usersResponse.TryGetProperty("results", out var usersArray))
                         {
-                            var users = JsonSerializer.Deserialize<List<JellyseerrUser>>(usersArray.ToString());
+                            var users = System.Text.Json.JsonSerializer.Deserialize<List<JellyseerrUser>>(usersArray.ToString());
                             _logger.Info($"Found {users?.Count ?? 0} users at {url.Trim()}");
                             var user = users?.FirstOrDefault(u => string.Equals(u.JellyfinUserId, jellyfinUserId, StringComparison.OrdinalIgnoreCase));
                             if (user != null)
@@ -317,6 +321,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             return StatusCode(502, new { ok = false, message = "No album found! Cannot get download!" });
         }
 
+        [Authorize]
         private async Task<IActionResult> ProxyJellyseerrRequest(string apiPath, HttpMethod method, string? content = null)
         {
             var config = JellyfinEnhanced.Instance?.Configuration;
@@ -403,6 +408,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         }
 
         [HttpGet("jellyseerr/status")]
+        [Authorize]
         public async Task<IActionResult> GetJellyseerrStatus()
         {
             var config = JellyfinEnhanced.Instance?.Configuration;
@@ -437,6 +443,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         }
 
         [HttpGet("jellyseerr/validate")]
+        [Authorize]
         public async Task<IActionResult> ValidateJellyseerr([FromQuery] string url, [FromQuery] string apiKey)
         {
             if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
@@ -462,6 +469,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         }
 
         [HttpGet("jellyseerr/user-status")]
+        [Authorize]
         public async Task<IActionResult> GetJellyseerrUserStatus()
         {
             // First check active status
@@ -469,7 +477,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             bool active = false;
             if (activeResult?.Value is not null)
             {
-                var json = JsonSerializer.Serialize(activeResult.Value);
+                var json = System.Text.Json.JsonSerializer.Serialize(activeResult.Value);
                 using var doc = JsonDocument.Parse(json);
                 if (doc.RootElement.TryGetProperty("active", out var a))
                     active = a.GetBoolean();
@@ -491,47 +499,55 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
 
 
         [HttpGet("jellyseerr/search")]
+        [Authorize]
         public Task<IActionResult> JellyseerrSearch([FromQuery] string query)
         {
             return ProxyJellyseerrRequest($"/api/v1/search?query={Uri.EscapeDataString(query)}", HttpMethod.Get);
         }
 
         [HttpGet("jellyseerr/sonarr")]
+        [Authorize]
         public Task<IActionResult> GetSonarrInstances()
         {
             return ProxyJellyseerrRequest("/api/v1/service/sonarr", HttpMethod.Get);
         }
 
         [HttpGet("jellyseerr/radarr")]
+        [Authorize]
         public Task<IActionResult> GetRadarrInstances()
         {
             return ProxyJellyseerrRequest("/api/v1/service/radarr", HttpMethod.Get);
         }
 
         [HttpGet("jellyseerr/{type}/{serverId}")]
+        [Authorize]
         public Task<IActionResult> GetServiceDetails(string type, int serverId)
         {
             return ProxyJellyseerrRequest($"/api/v1/service/{type}/{serverId}", HttpMethod.Get);
         }
 
         [HttpPost("jellyseerr/request")]
+        [Authorize]
         public async Task<IActionResult> JellyseerrRequest([FromBody] JsonElement requestBody)
         {
             return await ProxyJellyseerrRequest("/api/v1/request", HttpMethod.Post, requestBody.ToString());
         }
         [HttpGet("jellyseerr/tv/{tmdbId}")]
+        [Authorize]
         public Task<IActionResult> GetTvShow(int tmdbId)
         {
             return ProxyJellyseerrRequest($"/api/v1/tv/{tmdbId}", HttpMethod.Get);
         }
 
         [HttpGet("jellyseerr/tv/{tmdbId}/seasons")]
+        [Authorize]
         public Task<IActionResult> GetTvSeasons(int tmdbId)
         {
             return ProxyJellyseerrRequest($"/api/v1/tv/{tmdbId}/seasons", HttpMethod.Get);
         }
 
         [HttpPost("jellyseerr/request/tv/{tmdbId}/seasons")]
+        [Authorize]
         public async Task<IActionResult> RequestTvSeasons(int tmdbId, [FromBody] JsonElement requestBody)
         {
             return await ProxyJellyseerrRequest($"/api/v1/request", HttpMethod.Post, requestBody.ToString());
@@ -643,6 +659,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         }
 
         [HttpGet("tmdb/validate")]
+        [Authorize]
         public async Task<IActionResult> ValidateTmdb([FromQuery] string apiKey)
         {
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -692,15 +709,33 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
                 return StatusCode(503);
             }
 
+            // Determine the first configured Jellyseerr URL (if any) for client-side deep links
+            string jellyseerrBaseUrl = string.Empty;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(config.JellyseerrUrls))
+                {
+                    jellyseerrBaseUrl = config.JellyseerrUrls
+                        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(u => u.Trim())
+                        .FirstOrDefault() ?? string.Empty;
+                }
+            }
+            catch { /* ignore */ }
+
+            // Do not expose TMDB API key to clients; expose a boolean instead
+            var tmdbEnabled = !string.IsNullOrWhiteSpace(config.TMDB_API_KEY);
+
             return new JsonResult(new
             {
-                // For Jellyfin Elsewhere & Reviews
-                config.TMDB_API_KEY,
+                // For Jellyfin Elsewhere & Reviews (only whether configured)
+                TmdbEnabled = tmdbEnabled,
 
                 // For Arr Links
                 config.SonarrUrl,
                 config.RadarrUrl,
-                config.BazarrUrl
+                config.BazarrUrl,
+                JellyseerrBaseUrl = jellyseerrBaseUrl
             });
         }
         [HttpGet("public-config")]
@@ -743,19 +778,26 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
                 config.ShowAudioLanguages,
                 config.Shortcuts,
                 config.ShowReviews,
+                config.ReviewsExpandedByDefault,
                 config.PauseScreenEnabled,
                 config.QualityTagsEnabled,
                 config.GenreTagsEnabled,
+                config.LanguageTagsEnabled,
                 config.DisableAllShortcuts,
                 config.DefaultSubtitleStyle,
                 config.DefaultSubtitleSize,
                 config.DefaultSubtitleFont,
                 config.DisableCustomSubtitleStyles,
+                // Overlay positions
+                config.QualityTagsPosition,
+                config.GenreTagsPosition,
+                config.LanguageTagsPosition,
 
                 // Jellyseerr Search Settings
                 config.JellyseerrEnabled,
                 config.JellyseerrShowAdvanced,
                 config.ShowElsewhereOnJellyseerr,
+                config.JellyseerrUseJellyseerrLinks,
 
                 // Arr Links Settings
                 config.ArrLinksEnabled,
@@ -767,13 +809,9 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         }
 
         [HttpGet("tmdb/{**apiPath}")]
+        [Authorize]
         public async Task<IActionResult> ProxyTmdbRequest(string apiPath)
         {
-            if (!Request.Headers.TryGetValue("X-Emby-Token", out var token) || string.IsNullOrEmpty(token))
-            {
-                return Unauthorized("User authentication required.");
-            }
-
             var config = JellyfinEnhanced.Instance?.Configuration;
             if (config == null || string.IsNullOrEmpty(config.TMDB_API_KEY))
             {
@@ -876,6 +914,117 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
         {
             var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"Jellyfin.Plugin.JellyfinEnhanced.{resourcePath.Replace('/', '.')}");
             return stream == null ? NotFound() : new FileStreamResult(stream, "application/javascript");
+        }
+
+        [HttpGet("user-settings/{userId}/settings.json")]
+        [Authorize]
+        public IActionResult GetUserSettingsSettings(string userId)
+        {
+            var userConfig = _userConfigurationManager.GetUserConfiguration<UserSettings>(userId, "settings.json");
+            return Ok(userConfig);
+        }
+
+        [HttpGet("user-settings/{userId}/shortcuts.json")]
+        [Authorize]
+        public IActionResult GetUserSettingsShortcuts(string userId)
+        {
+            var userConfig = _userConfigurationManager.GetUserConfiguration<UserShortcuts>(userId, "shortcuts.json");
+            return Ok(userConfig);
+        }
+
+        [HttpGet("user-settings/{userId}/bookmarks.json")]
+        [Authorize]
+        public IActionResult GetUserSettingsBookmarks(string userId)
+        {
+            var userConfig = _userConfigurationManager.GetUserConfiguration<UserBookmarks>(userId, "bookmarks.json");
+            return Ok(userConfig);
+        }
+
+        [HttpGet("user-settings/{userId}/elsewhere.json")]
+        [Authorize]
+        public IActionResult GetUserSettingsElsewhere(string userId)
+        {
+            var userConfig = _userConfigurationManager.GetUserConfiguration<ElsewhereSettings>(userId, "elsewhere.json");
+            return Ok(userConfig);
+        }
+
+        [HttpPost("user-settings/{userId}/settings.json")]
+        [Authorize]
+        public IActionResult SaveUserSettingsSettings(string userId, [FromBody] UserSettings userConfiguration)
+        {
+            _userConfigurationManager.SaveUserConfiguration(userId, "settings.json", userConfiguration);
+            return Ok();
+        }
+
+        [HttpPost("user-settings/{userId}/shortcuts.json")]
+        [Authorize]
+        public IActionResult SaveUserSettingsShortcuts(string userId, [FromBody] UserShortcuts userConfiguration)
+        {
+            _userConfigurationManager.SaveUserConfiguration(userId, "shortcuts.json", userConfiguration);
+            return Ok();
+        }
+
+        [HttpPost("user-settings/{userId}/bookmarks.json")]
+        [Authorize]
+        public IActionResult SaveUserSettingsBookmarks(string userId, [FromBody] UserBookmarks userConfiguration)
+        {
+            _userConfigurationManager.SaveUserConfiguration(userId, "bookmarks.json", userConfiguration);
+            return Ok();
+        }
+
+        [HttpPost("user-settings/{userId}/elsewhere.json")]
+        [Authorize]
+        public IActionResult SaveUserSettingsElsewhere(string userId, [FromBody] ElsewhereSettings userConfiguration)
+        {
+            _userConfigurationManager.SaveUserConfiguration(userId, "elsewhere.json", userConfiguration);
+            return Ok();
+        }
+
+        [HttpPost("reset-all-users-settings")]
+        [Authorize]
+        public IActionResult ResetAllUsersSettings()
+        {
+            var users = _userManager.Users;
+            var defaultConfig = JellyfinEnhanced.Instance?.Configuration;
+
+            if (defaultConfig == null)
+            {
+                return StatusCode(500, new { success = false, message = "Default plugin configuration not found." });
+            }
+
+            var defaultUserSettings = new UserSettings
+            {
+                AutoPauseEnabled = defaultConfig.AutoPauseEnabled,
+                AutoResumeEnabled = defaultConfig.AutoResumeEnabled,
+                AutoPipEnabled = defaultConfig.AutoPipEnabled,
+                LongPress2xEnabled = defaultConfig.LongPress2xEnabled,
+                PauseScreenEnabled = defaultConfig.PauseScreenEnabled,
+                AutoSkipIntro = defaultConfig.AutoSkipIntro,
+                AutoSkipOutro = defaultConfig.AutoSkipOutro,
+                DisableCustomSubtitleStyles = defaultConfig.DisableCustomSubtitleStyles,
+                SelectedStylePresetIndex = defaultConfig.DefaultSubtitleStyle,
+                SelectedFontSizePresetIndex = defaultConfig.DefaultSubtitleSize,
+                SelectedFontFamilyPresetIndex = defaultConfig.DefaultSubtitleFont,
+                RandomButtonEnabled = defaultConfig.RandomButtonEnabled,
+                RandomUnwatchedOnly = defaultConfig.RandomUnwatchedOnly,
+                RandomIncludeMovies = defaultConfig.RandomIncludeMovies,
+                RandomIncludeShows = defaultConfig.RandomIncludeShows,
+                ShowFileSizes = defaultConfig.ShowFileSizes,
+                ShowAudioLanguages = defaultConfig.ShowAudioLanguages,
+                QualityTagsEnabled = defaultConfig.QualityTagsEnabled,
+                GenreTagsEnabled = defaultConfig.GenreTagsEnabled,
+                RemoveContinueWatchingEnabled = defaultConfig.RemoveContinueWatchingEnabled,
+                ReviewsExpandedByDefault = defaultConfig.ReviewsExpandedByDefault,
+                LastOpenedTab = "shortcuts"
+            };
+
+            foreach (var user in users)
+            {
+                _userConfigurationManager.SaveUserConfiguration(user.Id.ToString("N"), "settings.json", defaultUserSettings);
+            }
+
+            _logger.Info($"Reset settings for all {users.Count()} users to plugin defaults.");
+            return Ok(new { success = true, userCount = users.Count() });
         }
     }
 }
