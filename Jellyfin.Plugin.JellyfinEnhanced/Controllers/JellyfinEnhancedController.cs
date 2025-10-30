@@ -22,6 +22,7 @@ using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json.Linq;
 using Jellyfin.Plugin.JellyfinEnhanced.Configuration;
 using MediaBrowser.Controller;
+using Jellyfin.Plugin.JellyfinEnhanced.Model;
 
 namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
 {
@@ -266,59 +267,109 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             return StatusCode(500, "Could not connect to any configured SLSKD instance.");
         }
 
-        public async Task<IActionResult> SpotifyGetAlbum(string albumId, string[]? trackIdsWhitelist = null)
-        {   
-            var albumInfo = await ProxySpotifyRequest($"albums/{Uri.EscapeDataString(albumId)}", HttpMethod.Get) as ContentResult;
+        private async Task<IActionResult> SpotifyGetAlbums(string[] albumIds, string[]? trackIdsWhitelist = null)
+        {
+            _logger.Info("Received get albums request!");
+            string compiledAlbumIds = string.Join(",", albumIds.Distinct().ToArray());
+            var albumInfo = await ProxySpotifyRequest($"albums?ids={Uri.EscapeDataString(compiledAlbumIds)}", HttpMethod.Get) as ContentResult;
             if (albumInfo?.Content == null) {
-                return StatusCode(502, new { ok = false, message = $"Album not found for {albumId}" });
+                return StatusCode(502, new { ok = false, message = $"Albums not found for {compiledAlbumIds}" });
             }
-            var doc = JsonDocument.Parse(albumInfo.Content);
-            if (doc.RootElement.TryGetProperty("name", out var albumNameObject) && doc.RootElement.TryGetProperty("artists", out var albumArtistsObject) && doc.RootElement.TryGetProperty("tracks", out var albumTracksObject)) {
-                string? albumName = albumNameObject.GetString();
-                albumArtistsObject[0].TryGetProperty("name", out var mainArtistNameObject);
-                string? mainArtistName = mainArtistNameObject.GetString();
-                if (albumName == null || mainArtistName == null) {
-                    return StatusCode(502, new { ok = false, message = "Album or artist name not found! Cannot get download!" });
-                }
-                albumTracksObject.TryGetProperty("items", out var albumTrackItemsObject);
-                foreach (var trackObject in albumTrackItemsObject.EnumerateArray()) {
-                    trackObject.TryGetProperty("id", out var trackIdObject);
-                    string? trackId = trackIdObject.GetString();
-                    trackObject.TryGetProperty("name", out var trackNameObject);
-                    string? trackName = trackNameObject.GetString();
-                    if (trackId == null || trackName == null) {
-                        continue;
-                    }
-                    if (trackIdsWhitelist == null || trackIdsWhitelist.Length == 0 || trackIdsWhitelist.Contains(trackId)) {
-                        // either the track is whitelisted or there is no whitelist, so request a download for the track
-                        _ = Task.Run(async () => {
-                            string searchContent = JsonSerializer.Serialize(new {searchText = $"{mainArtistName} {trackName}"});
-                            var SLSKDSearchRequest = await ProxySLSKDRequest("searches", HttpMethod.Post, searchContent) as ContentResult;
-                            if (SLSKDSearchRequest?.Content != null) {
-                                var SLSKDSearchDoc = JsonDocument.Parse(SLSKDSearchRequest.Content);
-                                SLSKDSearchDoc.RootElement.TryGetProperty("id", out var SLSKDSearchIDObject);
-                                string? SLSKDSearchId = SLSKDSearchIDObject.GetString();
-                                if (SLSKDSearchId != null) {
-                                    var slskdRequest = new SLSKDRequest
-                                    {
-                                        SpotifyTrackId = trackId,
-                                        SLSKDSearchId = SLSKDSearchId,
-                                        TrackName = trackName,
-                                        AlbumName = albumName,
-                                        Artists = albumArtistsObject.EnumerateArray().Select(artist => artist.GetProperty("name").GetString() ?? "").ToArray()
-                                    };
-                                    _SLSKDStore.AddRequest(slskdRequest);
-                                }
-                            }
-                        });
-                    }
-                }
-                
+            var mainDoc = JsonDocument.Parse(albumInfo.Content);
+            if (!mainDoc.RootElement.TryGetProperty("albums", out var albumsObject))
+            {
+                return StatusCode(502, new { ok = false, message = $"Albums not found for {compiledAlbumIds}" });
+            }
+            List<string> artistIds = new List<string>();
 
-                // This is where we request the album download and whitelist ONLY this track
-                return Ok(new { albumId = albumId });
+            foreach (var doc in albumsObject.EnumerateArray())
+            {
+                var albumId = doc.GetProperty("id").GetString();
+                _logger.Info($"attempting {albumId}");
+                if (albumId == null) continue;
+                _logger.Info($"getting album id {albumId}");
+                if (doc.TryGetProperty("name", out var albumNameObject) && doc.TryGetProperty("artists", out var albumArtistsObject) && doc.TryGetProperty("tracks", out var albumTracksObject))
+                {
+                    string? albumName = albumNameObject.GetString();
+                    string albumImageUrl = "";
+                    if (doc.TryGetProperty("images", out var albumImageObjects) && albumImageObjects[0].TryGetProperty("url", out var albumImageUrlObject))
+                    {
+                        albumImageUrl = albumImageUrlObject.GetString() ?? "";
+                    }
+                    albumArtistsObject[0].TryGetProperty("name", out var mainArtistNameObject);
+                    string? mainArtistName = mainArtistNameObject.GetString();
+                    if (albumName == null || mainArtistName == null)
+                    {
+                        continue;
+                        //return StatusCode(502, new { ok = false, message = "Album or artist name not found! Cannot get download!" });
+                    }
+                    albumTracksObject.TryGetProperty("items", out var albumTrackItemsObject);
+                    foreach (var trackObject in albumTrackItemsObject.EnumerateArray())
+                    {
+                        trackObject.TryGetProperty("id", out var trackIdObject);
+                        string? trackId = trackIdObject.GetString();
+                        trackObject.TryGetProperty("name", out var trackNameObject);
+                        trackObject.TryGetProperty("artists", out JsonElement trackArtistsObject);
+
+                        string? trackName = trackNameObject.GetString();
+                        if (trackId == null || trackName == null)
+                        {
+                            continue;
+                        }
+                        if (trackIdsWhitelist == null || trackIdsWhitelist.Length == 0 || trackIdsWhitelist.Contains(trackId))
+                        {
+                            artistIds.AddRange(trackArtistsObject.EnumerateArray().Select(artist => artist.GetProperty("id").GetString() ?? "").ToArray());
+                            artistIds.AddRange(albumArtistsObject.EnumerateArray().Select(artist => artist.GetProperty("id").GetString() ?? "").ToArray());
+                            // either the track is whitelisted or there is no whitelist, so request a download for the track
+                            _ = Task.Run(async () =>
+                            {
+                                string searchContent = JsonSerializer.Serialize(new { searchText = $"{trackName}" });
+                                var SLSKDSearchRequest = await ProxySLSKDRequest("searches", HttpMethod.Post, searchContent) as ContentResult;
+                                if (SLSKDSearchRequest?.Content != null)
+                                {
+                                    var SLSKDSearchDoc = JsonDocument.Parse(SLSKDSearchRequest.Content);
+                                    SLSKDSearchDoc.RootElement.TryGetProperty("id", out var SLSKDSearchIDObject);
+                                    string? SLSKDSearchId = SLSKDSearchIDObject.GetString();
+                                    if (SLSKDSearchId != null)
+                                    {
+                                        var slskdRequest = new SlskdRequest
+                                        {
+                                            SpotifyTrackId = trackId,
+                                            SLSKDSearchId = SLSKDSearchId,
+                                            TrackName = trackName,
+                                            AlbumName = albumName,
+                                            ImageUrl = albumImageUrl,
+                                            AlbumArtists = albumArtistsObject.EnumerateArray().Select(artist => artist.GetProperty("name").GetString() ?? "").ToArray(),
+                                            Artists = trackArtistsObject.EnumerateArray().Select(artist => artist.GetProperty("name").GetString() ?? "").ToArray()
+                                        };
+
+                                        _SLSKDStore.AddRequest(slskdRequest);
+                                    }
+                                }
+                            });
+                        }
+                    }
+
+
+                    // This is where we request the album download and whitelist ONLY this track
+                }
             }
-            return StatusCode(502, new { ok = false, message = "No album found! Cannot get download!" });
+            string artistees = string.Join(",", artistIds.Distinct());
+            var ArtistsObject = await ProxySpotifyRequest($"artists?ids={artistees}", HttpMethod.Get) as ContentResult;
+            if (ArtistsObject != null && ArtistsObject.Content != null)
+            {
+                _logger.Info(ArtistsObject.Content);
+                SpotifyMultipleArtistsResponse? artistsResponse = JsonSerializer.Deserialize<SpotifyMultipleArtistsResponse>(ArtistsObject.Content);
+                if (artistsResponse != null)
+                {
+                    foreach (SpotifyArtist artist in artistsResponse.Artists)
+                    {
+                        _SLSKDStore.AddArtist(artist);
+                    }
+                }
+            }
+            return Ok(new { message="did you expect something?" });
+            //return StatusCode(502, new { ok = false, message = "No album found! Cannot get download!" });
         }
 
         [Authorize]
@@ -580,7 +631,8 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             if (doc.RootElement.TryGetProperty("album", out var albumObject) && albumObject.TryGetProperty("id", out var albumIdObject))
             {
                 string albumId = albumIdObject.GetString() ?? "";
-                await SpotifyGetAlbum(albumId, [trackId]);
+                _logger.Info("Attempting to download album");
+                await SpotifyGetAlbums([albumId], [trackId]);
                 // This is where we request the album download and whitelist ONLY this track
                 return Ok(new { albumId = albumId });
             }
@@ -597,7 +649,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Controllers
             }
             var doc = JsonDocument.Parse(trackInfo.Content);
             if (doc.RootElement.TryGetProperty("id", out var albumIdObject)) {
-                await SpotifyGetAlbum(albumId);
+                await SpotifyGetAlbums([albumId]);
                 return Ok(new { albumId = albumId });
             }
             return StatusCode(502, new { ok = false, message = "No parent album found! Cannot get download!" });

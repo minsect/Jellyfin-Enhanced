@@ -286,3 +286,4 @@ mono_crash.*.json
 .env
 build.sh
 shell.nix
+dbuild.sh

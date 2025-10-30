@@ -21,7 +21,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Jellyfin.Plugin.JellyfinEnhanced.Model;
-
+using TagLib;
+using System.Runtime.CompilerServices;
+using System.Xml.Linq;
 namespace Jellyfin.Plugin.JellyfinEnhanced.Services
 {
     public class SLSKDService : BackgroundService
@@ -85,7 +87,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
         };
         private static string GetExtension(string? filename)
         {
-            if (string.IsNullOrEmpty(filename)) {return "";}
+            if (string.IsNullOrEmpty(filename)) { return ""; }
             // getting file extension (extension property in file doesn't always return the extension)
             int lastDotIndex = filename.LastIndexOf('.');
             if (lastDotIndex >= 0 && lastDotIndex < filename.Length - 1)
@@ -94,6 +96,124 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
             }
             return "";
         }
+
+        public async Task<string?> DownloadImageAsync(string imageUrl, string filePathBase)
+        {
+            string extension = ".jpg"; // Default fallback extension
+            
+            using (var client = new HttpClient())
+            {
+                // 1. Determine the file extension by checking Content-Type headers via HEAD request
+                try
+                {
+                    using (var request = new HttpRequestMessage(HttpMethod.Head, imageUrl))
+                    using (var response = await client.SendAsync(request))
+                    {
+                        response.EnsureSuccessStatusCode();
+
+                        if (response.Content.Headers.TryGetValues("Content-Type", out var values))
+                        {
+                            string mimeType = values.FirstOrDefault() ?? string.Empty;
+
+                            extension = mimeType.ToLowerInvariant() switch
+                            {
+                                "image/jpeg" => ".jpg",
+                                "image/png" => ".png",
+                                "image/gif" => ".gif",
+                                "image/webp" => ".webp",
+                                _ => ".jpg", // Fallback to JPEG
+                            };
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Error determining image type for {imageUrl}: {ex.Message}");
+                    // Use default extension (.jpg) and continue
+                }
+
+                // 2. Construct the final file path with the determined extension
+                string finalFilePath = filePathBase + extension;
+
+                // 3. Download the actual image content using the same HttpClient
+                try
+                {
+                    using (var stream = await client.GetStreamAsync(imageUrl))
+                    {
+                        // 4. Save to the file path
+                        using (var fileStream = new FileStream(finalFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                        {
+                            await stream.CopyToAsync(fileStream);
+                            _logger.LogInformation($"Successfully downloaded image to {finalFilePath}");
+                            return finalFilePath; // Return the path on success
+                        }
+                    }
+                }
+                catch (HttpRequestException httpEx)
+                {
+                    _logger.LogError($"Error downloading image from {imageUrl}: {httpEx.Message}");
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Error saving file to {finalFilePath}: {ex.Message}");
+                    return null;
+                }
+            }
+        }
+
+        private static readonly Regex InvalidFileNameChars = new Regex(@"[<>:""/\\|?*]", RegexOptions.Compiled);
+
+        private static string SanitizeString(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+            {
+                return input;
+            }
+            return InvalidFileNameChars.Replace(input, "");
+        }
+
+        private async Task CreateOrUpdateArtistDirectory(SpotifyArtist artist)
+        {
+            var config = JellyfinEnhanced.Instance?.Configuration;
+            if (config == null || string.IsNullOrEmpty(config.SpotifySearchMusicDirectory)) return;
+            string artistPath = $"{config.SpotifySearchMusicDirectory}/{SanitizeString(artist.Name)}";
+            Directory.CreateDirectory(artistPath);
+            string? artistArtPath = null;
+            if (artist.Images[0] != null)
+            {
+                artistArtPath = await DownloadImageAsync(artist.Images[0].Url, $"{artistPath}/folder");
+            }
+            var nfoDocument = new XDocument(
+            new XElement("artist",
+                new XElement("name", artist.Name),
+                new XElement("sortname", artist.Name), // For sorting purposes
+                new XElement("spotifyid", artist.Id),
+                (artist.Genres ?? Enumerable.Empty<string>()).Select(g => new XElement("genre", g)),
+                //new XElement("album", "Album Placeholder"),
+                //new XElement("genre", artist.Genres),
+                new XElement("thumb", artist.Images[0].Url)
+            )
+        );
+
+        // 3. Save the XML document to the file system asynchronously
+        await using (var stream = new FileStream($"{artistPath}/artist.nfo", FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true))
+        {
+            nfoDocument.Save(stream);
+        }
+        }
+        
+        /*private static void CreateOrUpdateAlbumDirectory(SlskdRequest request)
+        {
+            var config = JellyfinEnhanced.Instance?.Configuration;
+            if (config == null || string.IsNullOrEmpty(config.SpotifySearchMusicDirectory)) return;
+            CreateOrUpdateArtistDirectory(request);
+            string mainArtistName = SanitizeString(request.Artists[0]);
+            string albumPath = $"{config.SpotifySearchMusicDirectory}/{mainArtistName}/{SanitizeString(request.AlbumName)}";
+            Directory.CreateDirectory(albumPath);
+
+        }*/
+
         private static int GetExtensionPriority(string? filename)
         {
             string extension = GetExtension(filename);
@@ -127,15 +247,25 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                     await Task.Delay(4000, stoppingToken);
                     continue;
                 }
+
+                // address the artist situation
+                foreach (SpotifyArtist artist in _store.GetAllArtists())
+                {
+                    _logger.LogInformation($"artist attempting to be added: {artist.Name}");
+                    await CreateOrUpdateArtistDirectory(artist);
+                    _store.TryRemoveArtist(artist.Id);
+                }
+
                 var SLSKDSearches = await ProxySLSKDRequest("searches", HttpMethod.Get);
                 if (SLSKDSearches != null && SLSKDSearches.IsSuccessStatusCode) {
-                    var SLSKDSearchesDoc = JsonDocument.Parse(await SLSKDSearches.Content.ReadAsStringAsync()); // this is an array
-                    foreach (var search in SLSKDSearchesDoc.RootElement.EnumerateArray())
+                    List<SlskdSearchInfo>? SLSKDSearchesDoc = JsonSerializer.Deserialize<List<SlskdSearchInfo>>(await SLSKDSearches.Content.ReadAsStringAsync()); // this is an array
+                    if (SLSKDSearchesDoc == null) continue;
+                    foreach (SlskdSearchInfo search in SLSKDSearchesDoc)
                     {
-                        var searchId = search.GetProperty("id").GetString();
+                        var searchId = search.Id;
                         if (searchId == null) continue;
                         if (_store.TryGetRequest(searchId, out var request)) {
-                            var isSearchComplete = search.GetProperty("isComplete").GetBoolean();
+                            var isSearchComplete = search.IsComplete;
                             if (!string.IsNullOrEmpty(request.SLSKDDownloadUsername) && !string.IsNullOrEmpty(request.SLSKDDownloadFilename))
                             {
                                 // this file is downloading!!!!
@@ -175,8 +305,33 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                                     {
                                         try
                                         {
+                                            byte[] imageBytes;
+                                            using (var client = new HttpClient())
+                                            {
+                                                try
+                                                {
+                                                    _logger.LogInformation($"trying to download {request.ImageUrl}");
+                                                    imageBytes = await client.GetByteArrayAsync(request.ImageUrl);
+                                                }
+                                                catch (HttpRequestException ex)
+                                                {
+                                                    _logger.LogError($"Error downloading album image: {ex.Message}");
+                                                    return;
+                                                }
+                                            }
+                                            await DownloadImageAsync(request.ImageUrl, $"{outputDirectory}/cover");
+                                            TagLib.File audioFile = TagLib.File.Create(filePath);
+                                            audioFile.Tag.Clear();
+                                            audioFile.Tag.AlbumArtists = request.AlbumArtists;
+                                            audioFile.Tag.Performers = request.Artists;
+                                            audioFile.Tag.Album = request.AlbumName;
+                                            if (imageBytes != null)
+                                            {
+                                                audioFile.Tag.Pictures = [new Picture(new ByteVector(imageBytes))];
+                                            }
+                                            audioFile.Save();
                                             Directory.CreateDirectory(outputDirectory);
-                                            File.Move(filePath, outputPath);
+                                            System.IO.File.Move(filePath, outputPath);
                                             _logger.LogInformation($"Successfully saved file for {request.TrackName} to {outputPath}");
                                         }
                                         catch (Exception ex)
@@ -189,7 +344,8 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                                         _logger.LogInformation($"Failed to get directory for output path: {outputPath}");
                                     }
                                     _store.TryRemoveRequest(searchId);
-                                } else if (fileInfo.State.Contains("Completed"))
+                                }
+                                else if (fileInfo.State.Contains("Completed"))
                                 {
                                     // do retry stuff if it was "completed" but not successful
                                     if (request.DownloadAttempts >= 3)
@@ -208,17 +364,19 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                                     await ProxySLSKDRequest($"transfers/downloads/{Uri.EscapeDataString(request.SLSKDDownloadUsername)}", HttpMethod.Post, JsonSerializer.Serialize(downloadRequests));
                                     request.DownloadAttempts = request.DownloadAttempts + 1;
                                 }
-                            } 
-                            else if (isSearchComplete) 
+                            }
+                            else if (isSearchComplete)
                             {
                                 // we must download something or discard this if theres no good match
                                 var SearchResponses = await ProxySLSKDRequest($"searches/{searchId}?includeResponses=true", HttpMethod.Get);
-                                if (SearchResponses == null || !SearchResponses.IsSuccessStatusCode) {
+                                if (SearchResponses == null || !SearchResponses.IsSuccessStatusCode)
+                                {
                                     _logger.LogError($"Failed to get search responses for search ID {searchId}");
                                     continue;
                                 }
                                 SlskdSearchInfo? searchRoot = JsonSerializer.Deserialize<SlskdSearchInfo>(await SearchResponses.Content.ReadAsStringAsync());
-                                if (searchRoot == null || searchRoot.Responses == null) {
+                                if (searchRoot == null || searchRoot.Responses == null)
+                                {
                                     _logger.LogError($"Failed to deserialize search responses for search ID {searchId}");
                                     continue;
                                 }
@@ -282,7 +440,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                                         Size = request.Size,
                                     });*/
                                     foundFile = true;
-                                    _logger.LogInformation($"{search.GetProperty("searchText").GetString()} search complete! downloading it now...");
+                                    _logger.LogInformation($"{search.SearchText} search complete! downloading it now...");
                                     break;
                                 }
                                 if (foundFile == true) continue;
@@ -290,10 +448,18 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                                 _store.TryRemoveRequest(searchId);
                                 continue;
                             }
+                            else if (!isSearchComplete)
+                            {
+                                if(search.FileCount - search.LockedFileCount > 20 && (DateTimeOffset.UtcNow - search.StartedAt).TotalSeconds >= 4)
+                                {
+                                    // force completion if more than 30 files and 4 seconds passed since the search
+                                    await ProxySLSKDRequest($"searches/{searchId}", HttpMethod.Put);
+                                }
+                            }
                         }
                     }
                 }
-                await Task.Delay(1000, stoppingToken);
+                await Task.Delay(500, stoppingToken);
             }
         }
     }

@@ -81,6 +81,49 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Model
         [JsonPropertyName("directories")]
         public required List<SlskdDownloadDirectoryInfo> Directories { get; set; }
     }
+    public class SpotifyImage
+    {
+        [JsonPropertyName("url")]
+        public required string Url { get; set; }
+
+        [JsonPropertyName("height")]
+        public required long Height { get; set; }
+        [JsonPropertyName("width")]
+        public required long Width { get; set; }
+    }
+    public class SpotifyArtist
+    {
+        [JsonPropertyName("genres")]
+        public required string[] Genres { get; set; }
+
+        [JsonPropertyName("id")]
+        public required string Id { get; set; }
+
+        [JsonPropertyName("images")]
+        public required SpotifyImage[] Images { get; set; }
+
+        [JsonPropertyName("name")]
+        public required string Name { get; set; }
+    }
+    public class SpotifyMultipleArtistsResponse
+    {
+        [JsonPropertyName("artists")]
+        public required List<SpotifyArtist> Artists { get; set; }
+    }
+    public class SlskdRequest
+    {
+        public string SpotifyTrackId { get; set; } = string.Empty;
+        public string SLSKDSearchId { get; set; } = string.Empty;
+        public string SLSKDDownloadUsername { get; set; } = string.Empty;
+        public string SLSKDDownloadFilename { get; set; } = string.Empty;
+        public string TrackName { get; set; } = string.Empty;
+        public string[] Artists { get; set; } = new string[0];
+        public string[] AlbumArtists { get; set; } = new string[0];
+        public string ImageUrl { get; set; } = string.Empty;
+        public int DownloadAttempts { get; set; } = 0;
+        public string AlbumName { get; set; } = string.Empty;
+        public long Size { get; set; } = 0;
+    }
 
     public class SlskdSearchInfo
     {
@@ -104,5 +147,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Model
 
         [JsonPropertyName("responses")]
         public List<SlskdSearchResponse>? Responses { get; set; }
+        [JsonPropertyName("startedAt")]
+        public required DateTimeOffset StartedAt { get; set; }
     }
 }

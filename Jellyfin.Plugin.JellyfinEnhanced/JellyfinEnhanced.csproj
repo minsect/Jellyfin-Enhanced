@@ -17,6 +17,7 @@
       <PackageReference Include="Jellyfin.Controller" Version="$(JellyfinVersion)" />
       <PackageReference Include="Jellyfin.Model" Version="$(JellyfinVersion)" />
       <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+      <PackageReference Include="TagLibSharp" Version="2.3.0" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(JellyfinVersion)' != '10.10.7'">
@@ -30,9 +31,9 @@
     </ItemGroup>
 
   <ItemGroup>
-    <None Remove="Configuration\configPage.html"/>
-    <EmbeddedResource Include="Configuration\configPage.html"/>
-    <None Remove="plugin.js"/>
+    <None Remove="Configuration\configPage.html" />
+    <EmbeddedResource Include="Configuration\configPage.html" />
+    <None Remove="plugin.js" />
     <EmbeddedResource Include="js\**" />
   </ItemGroup>
 
