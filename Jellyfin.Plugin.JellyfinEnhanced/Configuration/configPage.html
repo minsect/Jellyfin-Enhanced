@@ -327,9 +327,9 @@
                             </div>
                             <div class="fieldDescription" style="margin-bottom: 2em;">Enhance Jellyfin search by showing results from Spotify.<br>This allows users to discover and request missing songs and artists directly from Jellyfin.</div>
                             <div class="inputContainer">
-                                <label class="sectionTitle" style="margin-bottom: 5px;" for="SpotifySLSKDUrls">SLSKD URL(s)</label>
+                                <label class="sectionTitle" style="margin-bottom: 5px;" for="SpotifySLSKDUrls">Slskd Url(s)</label>
                                 <textarea style="display:block; height: 8vh !important;" class="emby-textarea emby-input" id="SpotifySLSKDUrls" name="SpotifySLSKDUrls" placeholder="http://slskd:5030&#10;https://slskd.example.com"></textarea>
-                                <div class="fieldDescription">Enter your SLSKD instance URLs, one per line. The script will use the first one that connects successfully.</div>
+                                <div class="fieldDescription">Enter your Slskd instance Urls, one per line. The script will use the first one that connects successfully.</div>
                             </div>
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="SpotifyClientID">Spotify Client ID</label>
@@ -353,22 +353,42 @@
                                 <div class="fieldDescription">the library all music downloaded will output to.</div>
                             </div>
                             <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="SpotifySearchSLSKDDownloadsDirectory">SLSKD Downloads directory</label>
+                                <label class="inputLabel inputLabelUnfocused" for="SpotifySearchSLSKDDownloadsDirectory">Slskd Downloads directory</label>
                                 <div style="display: flex; align-items: center; gap: 1em; margin-left: -1em;">
                                     <input id="SpotifySearchSLSKDDownloadsDirectory" is="emby-input" name="SpotifySearchSLSKDDownloadsDirectory" type="text" style="flex-grow: 1;"/>
                                 </div>
-                                <div class="fieldDescription">the directory which all SLSKD downloads are present</div>
+                                <div class="fieldDescription">the directory which all Slskd downloads are present</div>
                             </div>
                             <div class="inputContainer">
-                                <label class="inputLabel inputLabelUnfocused" for="SpotifySLSKDKey">SLSKD API Key</label>
+                                <label class="inputLabel inputLabelUnfocused" for="SpotifySLSKDKey">Slskd api Key</label>
                                 <div style="display: flex; align-items: center; gap: 1em; margin-left: -1em;">
                                     <input id="SpotifySLSKDKey" is="emby-input" name="SpotifySLSKDKey" type="text" style="flex-grow: 1;"/>
+                                </div>
+                                <div class="fieldDescription">Slskd's api key</div>
+                            </div>
+                            
+                            <div class="checkboxContainer" style="margin-bottom: 0.5em !important;">
+                                <label>
+                                    <input id="MetubeDownloaderEnabled" is="emby-checkbox" type="checkbox"/>
+                                    <span>Metube fallback</span>
+                                </label>
+                            </div>
+                            <div class="fieldDescription" style="margin-bottom: 2em;">Use MeTube as a fallback music downloader.</div>
+                            <div class="inputContainer">
+                                <label class="sectionTitle" style="margin-bottom: 5px;" for="MetubeUrls">MeTube Url(s)</label>
+                                <textarea style="display:block; height: 8vh !important;" class="emby-textarea emby-input" id="MetubeUrls" name="MetubeUrls" placeholder="http://metube:8081&#10;https://metube.example.com"></textarea>
+                                <div class="fieldDescription">Enter your MeTube instance URLs, one per line. The script will use the first one that connects successfully.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="MetubeDownloadDirectory">MeTube download directory</label>
+                                <div style="display: flex; align-items: center; gap: 1em; margin-left: -1em;">
+                                    <input id="MetubeDownloadDirectory" is="emby-input" name="MetubeDownloadDirectory" type="text" style="flex-grow: 1;"/>
                                     <span id="spotifyStatusIndicator" class="material-icons" style="transition: color 0.3s ease;"></span>
                                     <button is="emby-button" type="button" id="testSpotifyIntegrationButton" class="raised button-submit">
-                                        <span>Test</span>
+                                        <span>Test All</span>
                                     </button>
                                 </div>
-                                <div class="fieldDescription">SLSKD's API key</div>
+                                <div class="fieldDescription">The directory that MeTube downloads songs to</div>
                             </div>
                         </div>
                     </fieldset>
@@ -940,7 +960,10 @@
                 document.querySelector('#SpotifyClientSecret').value = config.SpotifyClientSecret;
                 document.querySelector('#SpotifySLSKDKey').value = config.SpotifySearchSLSKDKey;
                 document.querySelector('#SpotifySearchSLSKDDownloadsDirectory').value = config.SpotifySearchSLSKDDownloadsDirectory;
-                
+
+                document.querySelector("#MetubeUrls").value = config.MetubeUrls;
+                document.querySelector("#MetubeDownloaderEnabled").checked = config.MetubeDownloaderEnabled;
+                document.querySelector("#MetubeDownloadDirectory").value = config.MetubeDownloadDirectory;
 
                 document.querySelector('#arrLinksEnabled').checked = config.ArrLinksEnabled;
                 document.querySelector('#sonarrUrl').value = config.SonarrUrl;
@@ -1017,6 +1040,9 @@
             config.SpotifyClientSecret = document.querySelector('#SpotifyClientSecret').value
             config.SpotifySearchSLSKDKey = document.querySelector('#SpotifySLSKDKey').value
             config.SpotifySearchSLSKDDownloadsDirectory = document.querySelector('#SpotifySearchSLSKDDownloadsDirectory').value
+            config.MetubeDownloadDirectory = document.querySelector("#MetubeDownloadDirectory").value
+            config.MetubeDownloaderEnabled = document.querySelector("#MetubeDownloaderEnabled").checked
+            config.MetubeUrls = (document.querySelector('#MetubeUrls').value || '').split('\n').map(u => u.trim()).filter(Boolean).join('\n');
 
             config.ArrLinksEnabled = document.querySelector('#arrLinksEnabled').checked;
             config.SonarrUrl = document.querySelector('#sonarrUrl').value;

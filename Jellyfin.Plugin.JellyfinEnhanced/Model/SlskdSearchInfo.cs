@@ -116,6 +116,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Model
         public string SLSKDSearchId { get; set; } = string.Empty;
         public string SLSKDDownloadUsername { get; set; } = string.Empty;
         public string SLSKDDownloadFilename { get; set; } = string.Empty;
+        public string YoutubeDownloadId { get; set; } = string.Empty;
         public string TrackName { get; set; } = string.Empty;
         public string[] Artists { get; set; } = new string[0];
         public string[] AlbumArtists { get; set; } = new string[0];
@@ -138,7 +139,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Model
 
         [JsonPropertyName("isComplete")]
         public required bool IsComplete { get; set; }
-        
+
         [JsonPropertyName("searchText")]
         public required string SearchText { get; set; }
 
@@ -149,5 +150,20 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Model
         public List<SlskdSearchResponse>? Responses { get; set; }
         [JsonPropertyName("startedAt")]
         public required DateTimeOffset StartedAt { get; set; }
+    }
+
+    public class MetubeFileInfo
+    {
+        [JsonPropertyName("id")]
+        public required string Id { get; set; }
+
+        [JsonPropertyName("filename")]
+        public required string Filename { get; set; }
+    }
+    
+    public class MetubeHistoryInfo
+    {
+        [JsonPropertyName("done")]
+        public required MetubeFileInfo[] Done { get; set; }
     }
 }

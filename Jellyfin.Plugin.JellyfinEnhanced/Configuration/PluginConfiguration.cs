@@ -94,6 +94,9 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
             SpotifyClientSecret = "";
             SpotifySearchSLSKDKey = "";
             SpotifySearchSLSKDDownloadsDirectory = "";
+            MetubeDownloaderEnabled = false;
+            MetubeDownloadDirectory = "";
+            MetubeUrls = "";
 
             // Arr Links Settings
             ArrLinksEnabled = false;
@@ -169,6 +172,10 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Configuration
         
         public string SpotifyClientID { get; set; }
         public string SpotifyClientSecret { get; set; }
+        
+        public bool MetubeDownloaderEnabled { get; set; }
+        public string MetubeDownloadDirectory { get; set; }
+        public string MetubeUrls { get; set; }
 
         // Arr Links Settings
         public bool ArrLinksEnabled { get; set; }
