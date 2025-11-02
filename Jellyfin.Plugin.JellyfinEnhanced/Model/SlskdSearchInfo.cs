@@ -124,6 +124,8 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Model
         public int DownloadAttempts { get; set; } = 0;
         public string AlbumName { get; set; } = string.Empty;
         public long Size { get; set; } = 0;
+
+        public bool ExtraProcessing { get; set; } = false;
     }
 
     public class SlskdSearchInfo

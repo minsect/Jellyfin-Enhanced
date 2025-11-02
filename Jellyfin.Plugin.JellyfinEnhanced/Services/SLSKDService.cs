@@ -257,9 +257,10 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
             string artistPath = Path.Combine(config.SpotifySearchMusicDirectory, SanitizeString(artist.Name));
             Directory.CreateDirectory(artistPath);
             string? artistArtPath = null;
-            if (artist.Images[0] != null)
+            SpotifyImage? artistImage = artist.Images.FirstOrDefault();
+            if (artistImage != null)
             {
-                artistArtPath = await DownloadImageAsync(artist.Images[0].Url, Path.Combine(artistPath, "folder"));
+                artistArtPath = await DownloadImageAsync(artistImage.Url, Path.Combine(artistPath, "folder"));
             }
             var nfoDocument = new XDocument(
             new XElement("artist",
@@ -269,7 +270,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                 (artist.Genres ?? Enumerable.Empty<string>()).Select(g => new XElement("genre", g)),
                 //new XElement("album", "Album Placeholder"),
                 //new XElement("genre", artist.Genres),
-                new XElement("thumb", artist.Images[0].Url)
+                artistImage != null ? new XElement("thumb", artistImage.Url): null
             )
         );
 
@@ -341,7 +342,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                     {
                         var searchId = search.Id;
                         if (searchId == null) continue;
-                        if (_store.TryGetRequest(searchId, out var request)) {
+                        if (_store.TryGetRequest(searchId, out var request) && request.ExtraProcessing == false) {
                             var isSearchComplete = search.IsComplete;
                             if (!string.IsNullOrEmpty(request.YoutubeDownloadId))
                             {
@@ -361,7 +362,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                                 if (metubeFileInfo != null)
                                 {
                                     _logger.LogInformation($"Download for {request.TrackName} is successful!");
-                                    string mainArtistName = request.Artists[0] ?? "";
+                                    string mainArtistName = request.Artists.FirstOrDefault() ?? "";
                                     string filePath = Path.Combine(config.MetubeDownloadDirectory, metubeFileInfo.Filename);
                                     //string filePath = $"{config.MetubeDownloadDirectory.TrimEnd('/')}/{metubeFileInfo.Filename}";
                                     string outputDirectory = Path.Combine(config.SpotifySearchMusicDirectory, SanitizeString(mainArtistName), SanitizeString(request.AlbumName.Trim()));
@@ -434,7 +435,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                                 if (fileInfo.State == "Completed, Succeeded")
                                 {
                                     _logger.LogInformation($"Download for {request.TrackName} is successful!");
-                                    string mainArtistName = request.Artists[0] ?? "";
+                                    string mainArtistName = request.Artists.FirstOrDefault() ?? "";
                                     string[] pathDisassembled = request.SLSKDDownloadFilename.Split("\\");
 
                                     string filePath = Path.Combine(config.SpotifySearchSLSKDDownloadsDirectory, pathDisassembled[^2], pathDisassembled[^1]);
@@ -519,7 +520,7 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                                     //_store.TryRemoveRequest(searchId);
                                     //continue;
                                 }
-                                string mainArtistName = request.Artists[0] ?? "";
+                                string mainArtistName = request.Artists.FirstOrDefault() ?? "";
                                 if (fileCount >= 0)
                                 {
                                     var files = searchRoot.Responses
@@ -569,62 +570,68 @@ namespace Jellyfin.Plugin.JellyfinEnhanced.Services
                                 // below is logic for when the song isnt found on SLSKD and MeTube is provided
                                 if (config.MetubeDownloaderEnabled == true)
                                 {
-                                    YouTubeMusicClient ytclient = new(_logger, "US");
-
-                                    _logger.LogInformation($"No suitable files found for search ID {searchId}, searching youtube music with prompt {request.Artists[0]} {request.TrackName}");
-                                    PaginatedAsyncEnumerable<SearchResult> searchResults = ytclient.SearchAsync($"{request.Artists[0]} {request.TrackName}", SearchCategory.Songs);
-                                    IReadOnlyList<SearchResult> bufferedSearchResults = await searchResults.FetchItemsAsync(0, 20);
-                                    bool foundYoutube = false;
-                                    foreach (SongSearchResult song in bufferedSearchResults.Cast<SongSearchResult>())
+                                    request.ExtraProcessing = true;
+                                    _ = Task.Run(async () =>
                                     {
-                                        if (song.Artists.Any(artist => artist.Name.Equals(request.Artists[0], StringComparison.OrdinalIgnoreCase)) && NormalizeTitle(song.Name) == NormalizeTitle(request.TrackName))
-                                        {
+                                        YouTubeMusicClient ytclient = new(_logger, "US");
 
-                                            // the song was found!
-                                            _logger.LogInformation($"Youtube music found: {song.Name}, {string.Join(", ", song.Artists.Select(artist => artist.Name))}");
-                                            HttpResponseMessage? metubeQuery = await MetubeRequest("add", HttpMethod.Post, JsonSerializer.Serialize(new
+                                        _logger.LogInformation($"No suitable files found for search ID {searchId}, searching youtube music with prompt {request.Artists.FirstOrDefault()} {request.TrackName}");
+                                        PaginatedAsyncEnumerable<SearchResult> searchResults = ytclient.SearchAsync($"{request.Artists.FirstOrDefault()} {request.TrackName}", SearchCategory.Songs);
+                                        IReadOnlyList<SearchResult> bufferedSearchResults = await searchResults.FetchItemsAsync(0, 20);
+                                        bool foundYoutube = false;
+                                        foreach (SongSearchResult song in bufferedSearchResults.Cast<SongSearchResult>())
+                                        {
+                                            if (song.Artists.Any(artist => artist.Name.Equals(request.Artists.FirstOrDefault(), StringComparison.OrdinalIgnoreCase)) && NormalizeTitle(song.Name) == NormalizeTitle(request.TrackName))
                                             {
-                                                url = $"https://music.youtube.com/watch?v={song.Id}",
-                                                quality = "best",
-                                                format = "flac"
-                                            }));
-                                            if (metubeQuery != null && metubeQuery.IsSuccessStatusCode)
-                                            {
-                                                foundYoutube = true;
-                                                request.YoutubeDownloadId = song.Id;
-                                                break;
+
+                                                // the song was found!
+                                                _logger.LogInformation($"Youtube music found: {song.Name}, {string.Join(", ", song.Artists.Select(artist => artist.Name))}");
+                                                HttpResponseMessage? metubeQuery = await MetubeRequest("add", HttpMethod.Post, JsonSerializer.Serialize(new
+                                                {
+                                                    url = $"https://music.youtube.com/watch?v={song.Id}",
+                                                    quality = "best",
+                                                    format = "flac"
+                                                }));
+                                                if (metubeQuery != null && metubeQuery.IsSuccessStatusCode)
+                                                {
+                                                    foundYoutube = true;
+                                                    request.YoutubeDownloadId = song.Id;
+                                                    request.ExtraProcessing = false;
+                                                    break;
+                                                }
                                             }
                                         }
-                                    }
-                                    if (foundYoutube == false)
-                                    {
-                                        // impossible!!! youtube music has everything
-                                        // believe in yourself more (fuzzy search)
-                                        var songsFuzzyMatch = bufferedSearchResults.Cast<SongSearchResult>()
-                                            .OrderBy(song => LevenshteinDifference(song.Name, request.TrackName));
-                                        // trust in the process bro, just pick the first song
-                                        SongSearchResult? song = songsFuzzyMatch.FirstOrDefault();
-                                        if (song != null)
+                                        if (foundYoutube == false)
                                         {
-                                            HttpResponseMessage? metubeQuery = await MetubeRequest("add", HttpMethod.Post, JsonSerializer.Serialize(new
+                                            // impossible!!! youtube music has everything
+                                            // believe in yourself more (fuzzy search)
+                                            var songsFuzzyMatch = bufferedSearchResults.Cast<SongSearchResult>()
+                                                .OrderBy(song => LevenshteinDifference(song.Name, request.TrackName));
+                                            // trust in the process bro, just pick the first song
+                                            SongSearchResult? song = songsFuzzyMatch.FirstOrDefault();
+                                            if (song != null)
                                             {
-                                                url = $"https://music.youtube.com/watch?v={song.Id}",
-                                                quality = "best",
-                                                format = "flac"
-                                            }));
-                                            if (metubeQuery != null && metubeQuery.IsSuccessStatusCode)
+                                                HttpResponseMessage? metubeQuery = await MetubeRequest("add", HttpMethod.Post, JsonSerializer.Serialize(new
+                                                {
+                                                    url = $"https://music.youtube.com/watch?v={song.Id}",
+                                                    quality = "best",
+                                                    format = "flac"
+                                                }));
+                                                if (metubeQuery != null && metubeQuery.IsSuccessStatusCode)
+                                                {
+                                                    _logger.LogInformation($"Youtube music fuzzy found: {song.Name}, {string.Join(", ", song.Artists.Select(artist => artist.Name))}");
+                                                    request.YoutubeDownloadId = song.Id;
+                                                    request.ExtraProcessing = false;
+                                                }
+                                            }
+                                            else
                                             {
-                                                _logger.LogInformation($"Youtube music fuzzy found: {song.Name}, {string.Join(", ", song.Artists.Select(artist => artist.Name))}");
-                                                request.YoutubeDownloadId = song.Id;
+                                                // maybe we were wrong...
+                                                _store.TryRemoveRequest(searchId);
+                                                _logger.LogInformation($"No suitable youtube songs found for search ID {searchId}, This request is cancelled.");
                                             }
                                         }
-                                        else
-                                        {
-                                            // maybe we were wrong...
-                                            _store.TryRemoveRequest(searchId);
-                                            _logger.LogInformation($"No suitable youtube songs found for search ID {searchId}, This request is cancelled.");
-                                        }
-                                    }
+                                    });
                                 } else
                                 {
                                     _logger.LogInformation($"No suitable files found for search ID {searchId}, This request is cancelled.");
